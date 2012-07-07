@@ -1,5 +1,5 @@
 t: t.w
-	cweave t.w && pdftex t.tex
+	cweave t.w && xetex t.tex
 	ctangle t.w - t.cpp && clang++ -W -Wall -Wshadow\
 		-Wformat -Wsequence-point -Wunused\
 		-Wuninitialized -Wfloat-equal -ansi\
