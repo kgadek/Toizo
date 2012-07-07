@@ -1,3 +1,13 @@
+CXX         =   clang++
+CXXFLAGS    =   -O0 -g\
+                -W -Wall -Wshadow -Wformat \
+                -Wsequence-point -Wunused\
+		        -Wuninitialized -Wfloat-equal -ansi\
+		        -pedantic -Weffc++
+LDFLAGS     =   -lm
+
+c:
+
 t: t.w
 	cweave t.w && xetex t.tex
 	ctangle t.w - t.cpp && clang++ -W -Wall -Wshadow\
@@ -9,6 +19,7 @@ texclean:
 progclean:
 	rm -f t
 clean: texclean progclean
+	rm c
 
 hardclean: clean
 	rm -f t.pdf t.dvi t.cpp
