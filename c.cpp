@@ -41,6 +41,15 @@ struct lst {		// ok, tak naprawdę to nie jest lista
 		for(; p != NULL; ++s, p=p->tl) ;
 		return s;
 	}
+	static lst<T>* drop(lst<T> *l, const T v) {
+		lst<T> **t = &l;
+		for(; (*t) != NULL; t = &((*t)->tl))
+			if((*t)->hd == v) {
+				(*t) = (*t)->tl;
+				return l;
+			}
+		return l;
+	}
 	T hd;
 	lst<T> *tl;
 };
@@ -174,6 +183,31 @@ int main() {
 				p.rots = new lst<char>(i);
 			} else if(p.type == 'I'-'A') {
 				p.rots = new lst<char>(i, new lst<char>((i+1)%4, new lst<char>((i+2)%4)));
+			}
+		}
+	}
+
+
+	// heureza #4: sąsiadujące żarówki
+	// w takim wypadku jasne, że nie mogą być do siebie skierowane
+	for(xx=0; xx < X; ++xx) {
+		for(yy=0; yy < Y; ++yy) {
+			node &p = board[yy][xx];
+			if(p.type != 'I'-'A' && p.type != -1-('I'-'A'))
+				continue;
+			if(xx+1 < X) {
+				node &r = board[yy][xx+1]; // element on the right
+				if(r.type == 'I'-'A' || r.type == -1-('I'-'A')) {
+					p.rots = lst<char>::drop(p.rots, 0);
+					r.rots = lst<char>::drop(r.rots, 2);
+				}
+			}
+			if(yy+1 < Y) {
+				node &b = board[yy+1][xx]; // element below
+				if(b.type == 'I'-'A' || b.type == -1-('I'-'A')) {
+					p.rots = lst<char>::drop(p.rots, 1);
+					b.rots = lst<char>::drop(b.rots, 3);
+				}
 			}
 		}
 	}
