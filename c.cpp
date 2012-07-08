@@ -5,6 +5,8 @@
 ** 
 *********************************************************************/
 #include <cstdio>
+#include <vector>
+#include <algorithm>
 
 
 
@@ -98,12 +100,11 @@ int X, Y, XY; //rozmiary oraz iloczyn X*Y
 /*******************************
   Deklaracje funkcji
 *******************************/
-			// te dwie funkcje radzą sobie z
-			// X=0 Y=pozycja
-void takePossOut(int xx, int yy, int dd);
-			// na pozycji X,Y uznajemy, że R jest
-			// niefajnym kierunkiem i tym kierunku
-			// nie będzie niczego. Damy znać sąsiadom.
+inline node* unionfindHead(int);
+inline void unionfindJoin(int,int);
+void setRotation(int,int);
+
+void setBacktrackRotation(int, char);
 
 
 
@@ -133,23 +134,21 @@ int main() {
 			inp = input[inpPos];
 			if(inp == 'H' || ('D' <= inp && inp <= 'F'))
 				posBat = boardPos;
-			board[0][boardPos].p = *board+boardPos;
+
+			board[0][boardPos].p = *board+boardPos; // inicjujemy set
 			board[0][boardPos].rank = 1;
 			board[0][boardPos].bulbs = inp == 'I';
-			// heureza #1: jeśli 'A' to ustalamy ułożenie od razu.
-			// nie robimy tego dla 'D' dla prostoty implementacji
-			if(inp - 'A' == 0) {
-				board[0][boardPos].type = 'A' - inp - 1 ;
-				board[0][boardPos].rot = 0;
-				board[0][boardPos].rots = NULL;
-			} else {
-				board[0][boardPos].type = inp - 'A';
-				board[0][boardPos].rot = 0;
+
+			board[0][boardPos].type = inp - 'A';
+			board[0][boardPos].rot = 0;
+			// heureza #1: jeśli 'A' lub 'D' to ustalamy ułożenie od razu.
+			if(inp - 'A' == 0 || inp == 'D')
+				setRotation(boardPos, 0);
+			else // ... jak nie to nie
 				board[0][boardPos].rots = new lst<char>(rots[inp-'A']);
-			}
 		}
 	}
-	int yy, xx; 		// to do wypisywania wyników i debugowania
+	int yy, xx;			// to do wypisywania wyników i debugowania
 
 	
 	// heureza #2: sytuacja na rogach
@@ -165,17 +164,11 @@ int main() {
 		}
 		node &p = board[0][j];
 		if(p.type < 0) continue;
-		if(p.type == 'B'-'A' || p.type == 'D'-'A') {
-			p.type = 1-p.type;
-			p.rot = 0;
-			p.rots = NULL;	// formalnie rzecz biorąc to powinniśmy
-							// tu czyścić pamięć ale OS zrobi to
-							// za nas na końcu programu
-		} else if(p.type == 'C'-'A' || ('F'-'A' <= p.type && p.type <= 'H'-'A') ) {
-			p.type = -1-p.type;
-			p.rot = i;
-			p.rots = NULL;
-		} else if(p.type == 'I'-'A') {
+		if(p.type == 'B'-'A') // 'AD' też rot=0 ale to już h#1 załatwia
+			setRotation(j, 0);
+		else if(p.type == 'C'-'A' || ('F'-'A' <= p.type && p.type <= 'H'-'A') )
+			setRotation(j, i);
+		else if(p.type == 'I'-'A') {
 			p.rots = new lst<char>(i, new lst<char>(i+1));
 		}
 	}
@@ -195,21 +188,15 @@ int main() {
 		}
 		for(; tmpA<=tmpB; tmpA+=tmpC) {
 			node &p = board[0][tmpA];
-			if(p.type == 'B'-'A') {
-				p.type = -1-p.type;
-				p.rot = i%2;
-				p.rots = NULL;
-				takePossOut(tmpA%X, tmpA/X, p.rot);
-				takePossOut(tmpA%X, tmpA/X, (p.rot+2)%4);
-			} else if(p.type == 'C'-'A' || p.type == 'F'-'A') {
+			if(p.type == 'B'-'A')
+				setRotation(tmpA, i%2);
+			else if(p.type == 'C'-'A' || p.type == 'F'-'A') {
 				p.rots = new lst<char>(i, new lst<char>((i+1)%4));
-			} else if(p.type == 'G'-'A') {
-				p.type = -1-p.type;
-				p.rot = i;
-				p.rots = NULL;
-			} else if(p.type == 'H') {
-				p.rots = new lst<char>(i);
-			} else if(p.type == 'I'-'A') {
+			} else if(p.type == 'G'-'A')
+				setRotation(tmpA, i);
+			else if(p.type == 'H')
+				setRotation(tmpA, i);
+			else if(p.type == 'I'-'A') {
 				p.rots = new lst<char>(i, new lst<char>((i+1)%4, new lst<char>((i+2)%4)));
 			}
 		}
@@ -239,13 +226,15 @@ int main() {
 					b.rots = lst<char>::drop(b.rots, 3);
 				}
 			}
-			if(p.type >= 0 && lst<char>::size(p.rots) <= 1) {
-				p.rot = p.rots != NULL ? p.rots->hd : 0;
-				p.type = -1-p.type;
-				p.rots = NULL;
-			}
+			if(p.type >= 0 && lst<char>::size(p.rots) <= 1)
+				setRotation(xx+yy*X, p.rots != NULL ? p.rots->hd : 0);
 		}
 	}
+
+	// ok, mogły się pojawić braki w ustalaniu obrotów
+	for(int i=0; i<XY; ++i)
+		if(board[0][i].type >= 0 && board[0][i].rots == NULL)
+			setRotation(i, board[0][i].rot);
 
 
 	// wyświetlenie wyników preprocessingu
@@ -253,16 +242,35 @@ int main() {
 /*dbg*/		for(xx = 0; xx < X; ++xx) {
 /*dbg*/			node *p = &(board[yy][xx]);
 /*dbg*/			if((*p).type >= 0)
-/*dbg*/				printf(" %c%d{", (*p).type+'A', (*p).rot+1);
+/*dbg*/				printf("  ||  %c%d{", (*p).type+'A', (*p).rot+1);
 /*dbg*/			else
-/*dbg*/				printf(" %c%d{", -(*p).type+'A'-1, (*p).rot+1);
-/*dbg*/			for(; (*p).rots != NULL; (*p).rots = (*p).rots->tl)
+/*dbg*/				printf("  ||  %c%d{", -(*p).type+'A'-1, (*p).rot+1);
+/*dbg*/			int reducer = 4;
+/*dbg*/			for(; (*p).rots != NULL; (*p).rots = (*p).rots->tl, --reducer)
 /*dbg*/				printf("%d", (*p).rots->hd);
-/*dbg*/			printf("}");
+/*dbg*/			while(reducer-- >= 0) printf(" ");
+/*dbg*/			printf("}#%-2ld",p->p - board[0]);
 /*dbg*/		}
 /*dbg*/		printf("\n");
 /*dbg*/	}
 
+	std::vector< int > visitable; // zbiór wierzchołków osiągalnych ze źródła
+
+	std::vector< std::pair<int,node*> > setRollback;	// struktura do operacji
+													// rollback na union-find.
+					// każda operacja unionJoin(a,b) powoduje dodanie
+					// a lub b oraz oryginalnego pointera.
+					// Po komplecie takich operacji dodawany jest strażnik.
+	setRollback.push_back( std::pair<int,node*>(0,NULL));	// Oto strażnik.
+
+	node &bat = board[0][posBat];
+	if(bat.type >= 0)
+		bat.type = -1-bat.type; // wyciągamy z pętli. Ziarnko do ziarnka...
+	if(bat.rots == NULL)
+		bat.rots = new lst<char>(bat.rot);
+	for(lst<char> *r = board[0][posBat].rots; r != NULL; r=r->tl) {
+		setBacktrackRotation(posBat, r->hd);
+	}
 
 	// wypisywanie wyniku
 	for(yy = 0; yy < Y; ++yy) {
@@ -281,11 +289,92 @@ int main() {
   Definicje funkcji
 *******************************/
 
-// heureza #5: zabieranie możliwości sąsiadom
-// Chodzi o prostą rzecz: gdy uznajemy, że
-// z danego pola nigdy nie wyjdzie w kierunku
-// dd żaden kabel, to sąsiad od strony dd
-// nie powinien nawet rozważać opcji podłączenia
-void takePossOut(int xx, int yy, int dd) {
+node* unionfindHead(int x) {
+	node* r = board[0]+x;
+	for(; r->p != r; r=r->p) ;
+	return r;
+}
+
+void unionfindJoin(int x, int y) {
+	//if(x==y) ... // tego nie rozważamy bo unikamy takich połączeń
+	node *xP = unionfindHead(x); // O(log(X+Y))
+	node *yP = unionfindHead(y);
+	if(xP == yP) return; // już połączone
+	if(xP->rank > yP->rank) {
+		node *t = xP;
+		xP = yP;
+		yP = t;
+		// ew coś takiego: xP ^= yP ^= xP ^= yP;
+	}
+	// od teraz xP->rank <= yP->rank
+	xP->p = yP;
+	yP->rank += xP->rank;
+	yP->bulbs += xP->bulbs;
+}
+
+// czy urządzenie na pozycji pos jest ustalone i łączy w kierunku dir
+bool connectable(int pos, int dir) {
+	int pType = 'A'-1-board[0][pos].type;
+	if(pType < 'A') return false;
+	if(pType == 'A'-'A' || pType == 'D'-'A') return true;
+	dir = (4+dir-board[0][pos].rot)%4; // od teraz jakby zawsze rozważamy rot==0
+	if(dir == 0) return true; // ciekawa własność urządzeń
+	switch(pType) {
+		case 'B': case 'E': return dir == 2;
+		case 'C': case 'F': return dir == 1;
+		case 'G': case 'H': return dir == 1 || dir == 2;
+	}
+	return false;
+}
+// ustalona rotacja wynikająca z logiki "musi tak być zawsze"
+void setRotation(int pos, int rot) {
+	node &p = board[0][pos];
+	char ptype = 'A'+p.type;
+	p.type = -1-p.type;
+	p.rots = NULL;	// formalnie rzecz biorąc powinniśmy
+					// tutaj czyścić pamięć ale...
+	p.rot = rot;
+	// ok, teraz będzie brzydko... bardzo brzydko.
+	char posRel[] = {
+		pos%X<X-1?pos+1:-1, pos+X<XY?pos+X:-1, pos%X>=0?pos-1:-1, pos-X
+	};
+	switch(ptype) {
+		case 'A': case 'D':
+			if(posRel[0] >= 0 && connectable(posRel[0], 2))
+				unionfindJoin(pos, posRel[0]);
+			if(posRel[1] >= 0 && connectable(posRel[1], 3))
+				unionfindJoin(pos, posRel[1]);
+			if(posRel[2] >= 0 && connectable(posRel[2], 0))
+				unionfindJoin(pos, posRel[2]);
+			if(posRel[3] >= 0 && connectable(posRel[3], 1))
+				unionfindJoin(pos, posRel[3]);
+			break;
+		case 'B': case 'E':
+			if(posRel[rot] >= 0 && connectable(posRel[rot], (rot+2)%4))
+				unionfindJoin(pos, posRel[rot]);
+			if(posRel[2+rot] >= 0 && connectable(posRel[2+rot], rot))
+				unionfindJoin(pos, posRel[2+rot]); // nie ma modulo
+			break;
+		case 'C': case 'F':
+			if(posRel[rot] >= 0 && connectable(posRel[rot], (rot+2)%4))
+				unionfindJoin(pos, posRel[rot%4]);
+			if(posRel[(rot+1)%4] >= 0 && connectable(posRel[(rot+1)%4], (rot+3)%4))
+				unionfindJoin(pos, posRel[(rot+1)%4]);
+			break;
+		case 'G': case 'H':
+			if(posRel[rot] >= 0 && connectable(posRel[rot], (rot+2)%4))
+				unionfindJoin(pos, posRel[rot]);
+			if(posRel[(rot+1)%4] >= 0 && connectable(posRel[(rot+1)%4], (rot+3)%4))
+				unionfindJoin(pos, posRel[(rot+1)%4]);
+			if(posRel[(rot+2)%4] >= 0 && connectable(posRel[(rot+2)%4], rot))
+				unionfindJoin(pos, posRel[(rot+2)%4]);
+			break;
+		case 'I':
+			if(posRel[rot] >= 0 && connectable(posRel[rot], (rot+2)%4))
+				unionfindJoin(pos, posRel[rot]);
+	}
+}
+
+void setBacktrackRotation(int pos, char rot) {
 }
 
