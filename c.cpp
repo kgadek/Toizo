@@ -56,10 +56,18 @@ struct lst {		// ok, tak naprawdę to nie jest lista
 
 struct node {
 	char type;			// typ. Jeśli ustalono ułożenie to f(X) = -X-1 < 0
-						// mem: XY*4
+						// mem: XY*1
 	lst<char> *rots;	// mem: XY*4*8
-	char rot;			// mem: XY*4
+	char rot;			// mem: XY*1
+	node *p;			// wskaźnik na ojca (algo. union-find)
+						// mem: XY*4
+	int rank;			// ilość node'ów w drzewie (algo. union-find)
+						// mem: XY*4
+	int bulbs;			// ilość żarówek w drzewie (algo. union-find) 
+						// mem: XY*4
 } **board;
+						//----------
+						// mem: XY*46 < 11MB
 
 
 
@@ -86,8 +94,21 @@ lst<char> rots[] = {
 int X, Y, XY; //rozmiary oraz iloczyn X*Y
 
 
+
 /*******************************
   Deklaracje funkcji
+*******************************/
+			// te dwie funkcje radzą sobie z
+			// X=0 Y=pozycja
+void takePossOut(int xx, int yy, int dd);
+			// na pozycji X,Y uznajemy, że R jest
+			// niefajnym kierunkiem i tym kierunku
+			// nie będzie niczego. Damy znać sąsiadom.
+
+
+
+/*******************************
+  Main
 *******************************/
 int main() {
 	// wczytywanie planszy
@@ -112,14 +133,19 @@ int main() {
 			inp = input[inpPos];
 			if(inp == 'H' || ('D' <= inp && inp <= 'F'))
 				posBat = boardPos;
+			board[0][boardPos].p = *board+boardPos;
+			board[0][boardPos].rank = 1;
+			board[0][boardPos].bulbs = inp == 'I';
 			// heureza #1: jeśli 'A' to ustalamy ułożenie od razu.
 			// nie robimy tego dla 'D' dla prostoty implementacji
 			if(inp - 'A' == 0) {
-				board[0][boardPos].rot = 0;
 				board[0][boardPos].type = 'A' - inp - 1 ;
+				board[0][boardPos].rot = 0;
+				board[0][boardPos].rots = NULL;
 			} else {
-				board[0][boardPos].rots = new lst<char>(rots[inp-'A']);
 				board[0][boardPos].type = inp - 'A';
+				board[0][boardPos].rot = 0;
+				board[0][boardPos].rots = new lst<char>(rots[inp-'A']);
 			}
 		}
 	}
@@ -173,6 +199,8 @@ int main() {
 				p.type = -1-p.type;
 				p.rot = i%2;
 				p.rots = NULL;
+				takePossOut(tmpA%X, tmpA/X, p.rot);
+				takePossOut(tmpA%X, tmpA/X, (p.rot+2)%4);
 			} else if(p.type == 'C'-'A' || p.type == 'F'-'A') {
 				p.rots = new lst<char>(i, new lst<char>((i+1)%4));
 			} else if(p.type == 'G'-'A') {
@@ -195,6 +223,8 @@ int main() {
 			node &p = board[yy][xx];
 			if(p.type != 'I'-'A' && p.type != -1-('I'-'A'))
 				continue;
+			// ps. żarówki są na tyle nietypowe, że nie warto
+			// korzystać tu z takePossOut/3, lepiej ręcznie usuwać
 			if(xx+1 < X) {
 				node &r = board[yy][xx+1]; // element on the right
 				if(r.type == 'I'-'A' || r.type == -1-('I'-'A')) {
@@ -208,6 +238,11 @@ int main() {
 					p.rots = lst<char>::drop(p.rots, 1);
 					b.rots = lst<char>::drop(b.rots, 3);
 				}
+			}
+			if(p.type >= 0 && lst<char>::size(p.rots) <= 1) {
+				p.rot = p.rots != NULL ? p.rots->hd : 0;
+				p.type = -1-p.type;
+				p.rots = NULL;
 			}
 		}
 	}
@@ -237,5 +272,20 @@ int main() {
 		printf("\n");
 	}
 	return 0;
+}
+
+
+
+
+/*******************************
+  Definicje funkcji
+*******************************/
+
+// heureza #5: zabieranie możliwości sąsiadom
+// Chodzi o prostą rzecz: gdy uznajemy, że
+// z danego pola nigdy nie wyjdzie w kierunku
+// dd żaden kabel, to sąsiad od strony dd
+// nie powinien nawet rozważać opcji podłączenia
+void takePossOut(int xx, int yy, int dd) {
 }
 
