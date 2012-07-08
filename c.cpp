@@ -326,6 +326,27 @@ bool connectable(int pos, int dir) {
 	}
 	return false;
 }
+// usuwa połączenie w zadanym kierunku
+void makeUnconnectable(int pos, int dir) {
+	node &p = board[0][pos];
+	if(p.type < 0) return;
+	char type = p.type + 'A';
+	switch(type) {
+		case 'B': case 'E':
+			lst<char>::drop(p.rots, dir%2);
+			break;
+		case 'C': case 'F':
+			p.rots = lst<char>::drop(p.rots, dir);
+			p.rots = lst<char>::drop(p.rots, (dir+3)%4);
+			if(lst<char>::size(p.rots) <= 1)
+				setRotation(pos, p.rots != NULL ? p.rots->hd : 0);
+			break;
+		case 'G': case 'H':
+			setRotation(pos, (dir+1)%4);
+			break;
+		case 'A': case 'D': break; // dead-code o ile się nie pomyliłem
+	}
+}
 // ustalona rotacja wynikająca z logiki "musi tak być zawsze"
 void setRotation(int pos, int rot) {
 	node &p = board[0][pos];
@@ -352,8 +373,12 @@ void setRotation(int pos, int rot) {
 		case 'B': case 'E':
 			if(posRel[rot] >= 0 && connectable(posRel[rot], (rot+2)%4))
 				unionfindJoin(pos, posRel[rot]);
+			if(posRel[1+rot] >= 0)
+				makeUnconnectable(posRel[1+rot], (rot+3)%4);
 			if(posRel[2+rot] >= 0 && connectable(posRel[2+rot], rot))
 				unionfindJoin(pos, posRel[2+rot]); // nie ma modulo
+			if(posRel[(3+rot)%4] >= 0)
+				makeUnconnectable(posRel[(3+rot)%4], rot+1);
 			break;
 		case 'C': case 'F':
 			if(posRel[rot] >= 0 && connectable(posRel[rot], (rot+2)%4))
