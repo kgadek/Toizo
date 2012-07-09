@@ -67,9 +67,10 @@ struct node {
 						// mem: XY*4
 	int bulbs;			// ilość żarówek w drzewie (algo. union-find) 
 						// mem: XY*4
+	char inHeap;		// mem: XY*4
 } **board;
 						//----------
-						// mem: XY*46 < 11MB
+						// mem: XY*50
 
 
 
@@ -94,6 +95,15 @@ lst<char> rots[] = {
   Zmienne globalne
 *******************************/
 int X, Y, XY; //rozmiary oraz iloczyn X*Y
+std::vector< std::pair<int,node*> > setRollback;	// struktura do operacji
+													// rollback na union-find.
+
+struct markHeapOrderByPoss { // [] (int a, int b) { return ... }
+	inline bool operator() (int a, int b) {
+		return lst<char>::size(board[0][a].rots) >= lst<char>::size(board[0][b].rots);
+	}
+};
+std::vector<int> markHeap;
 
 
 
@@ -101,10 +111,12 @@ int X, Y, XY; //rozmiary oraz iloczyn X*Y
   Deklaracje funkcji
 *******************************/
 inline node* unionfindHead(int);
-inline void unionfindJoin(int,int);
+inline int unionfindJoin(int,int);
 void setRotation(int,int);
+void backtrack();
+bool connectable(int,int);
 
-void setBacktrackRotation(int, char);
+std::vector<int> setBacktrackRotation(int, int);
 
 
 
@@ -138,6 +150,8 @@ int main() {
 			board[0][boardPos].p = *board+boardPos; // inicjujemy set
 			board[0][boardPos].rank = 1;
 			board[0][boardPos].bulbs = inp == 'I';
+
+			board[0][boardPos].inHeap = 0;
 
 			board[0][boardPos].type = inp - 'A';
 			board[0][boardPos].rot = 0;
@@ -231,7 +245,7 @@ int main() {
 		}
 	}
 
-	// ok, mogły się pojawić braki w ustalaniu obrotów
+	// ok, mogły się pojawić braki w ustalaniu obrotów... nie powinny ale...
 	for(int i=0; i<XY; ++i)
 		if(board[0][i].type >= 0 && board[0][i].rots == NULL)
 			setRotation(i, board[0][i].rot);
@@ -246,9 +260,9 @@ int main() {
 /*dbg*/			else
 /*dbg*/				printf("  ||  %c%d{", -(*p).type+'A'-1, (*p).rot+1);
 /*dbg*/			int reducer = 4;
-/*dbg*/			for(; (*p).rots != NULL; (*p).rots = (*p).rots->tl, --reducer)
-/*dbg*/				printf("%d", (*p).rots->hd);
-/*dbg*/			while(reducer-- >= 0) printf(" ");
+/*dbg*/			for(lst<char> *pp = (*p).rots; pp != NULL; pp=pp->tl, --reducer)
+/*dbg*/				printf("%d", pp->hd);
+/*dbg*/			while(--reducer >= 0) printf(" ");
 /*dbg*/			printf("}#%-2ld",p->p - board[0]);
 /*dbg*/		}
 /*dbg*/		printf("\n");
@@ -256,21 +270,63 @@ int main() {
 
 	std::vector< int > visitable; // zbiór wierzchołków osiągalnych ze źródła
 
-	std::vector< std::pair<int,node*> > setRollback;	// struktura do operacji
-													// rollback na union-find.
 					// każda operacja unionJoin(a,b) powoduje dodanie
 					// a lub b oraz oryginalnego pointera.
 					// Po komplecie takich operacji dodawany jest strażnik.
-	setRollback.push_back( std::pair<int,node*>(0,NULL));	// Oto strażnik.
+	//setRollback.push_back( std::pair<int,node*>(0,NULL));	// Oto strażnik.
 
-	node &bat = board[0][posBat];
-	if(bat.type >= 0)
-		bat.type = -1-bat.type; // wyciągamy z pętli. Ziarnko do ziarnka...
-	if(bat.rots == NULL)
-		bat.rots = new lst<char>(bat.rot);
-	for(lst<char> *r = board[0][posBat].rots; r != NULL; r=r->tl) {
-		setBacktrackRotation(posBat, r->hd);
+	node &batt = board[0][posBat];
+	int pos;
+	if(batt.rots == NULL)
+		batt.rots = new lst<char>(batt.rot);
+	int ii;
+	int s;
+	for(lst<char> *r = batt.rots; r != NULL; r=r->tl) {
+		std::vector<int> undo(setBacktrackRotation(posBat, r->hd)); // to undo set join
+		std::vector<int> undoHeap; // to undo heap add 
+
+		if(posBat-X >= 0 && ! (board[0][posBat-X].inHeap) && board[0][posBat-X].type >= 0 && connectable(posBat, 3)) {
+			board[0][posBat-X].inHeap = 1;
+			markHeap.push_back(posBat-X); std::push_heap(markHeap.begin(), markHeap.end(), markHeapOrderByPoss());
+			undoHeap.push_back(posBat-X);
+		}
+		if(posBat+X < XY && ! (board[0][posBat+X].inHeap) && board[0][posBat+X].type >= 0 && connectable(posBat, 1)) {
+			board[0][posBat+X].inHeap = 1;
+			markHeap.push_back(posBat+X); std::push_heap(markHeap.begin(), markHeap.end(), markHeapOrderByPoss());
+			undoHeap.push_back(posBat+X);
+		}
+		if(posBat%X > 0 && ! (board[0][posBat-1].inHeap) && board[0][posBat-1].type >= 0 && connectable(posBat, 2)) {
+			board[0][posBat-1].inHeap = 1;
+			markHeap.push_back(posBat-1); std::push_heap(markHeap.begin(), markHeap.end(), markHeapOrderByPoss());
+			undoHeap.push_back(posBat-1);
+		}
+		if((posBat+1)%X > 0 && ! (board[0][posBat+1].inHeap) && board[0][posBat+1].type >= 0 && connectable(posBat, 0)) {
+			board[0][posBat+1].inHeap = 1;
+			markHeap.push_back(posBat+1); std::push_heap(markHeap.begin(), markHeap.end(), markHeapOrderByPoss());
+			undoHeap.push_back(posBat+1);
+		}
+
+		backtrack();
+
+		// undo add to heap
+		for(ii=undoHeap.size()-1; ii>=0; --ii)
+			board[0][undoHeap[ii]].inHeap = 0;
+		s=markHeap.size()-1;
+		for(ii=s; ii>=0; --ii)
+			if(!board[0][markHeap[ii]].inHeap) {
+				markHeap[ii] = markHeap[s--];
+				markHeap.pop_back();
+			}
+		std::make_heap(markHeap.begin(), markHeap.end(), markHeapOrderByPoss()); // O(n log n)...
+
+		for(int i=undo.size()-1; i>=0; --i) { // undo update sets
+			pos = undo[i];
+			board[0][pos].p->rank -= board[0][pos].rank;
+			board[0][pos].p->bulbs -= board[0][pos].bulbs;
+			board[0][pos].p = board[0]+pos;
+		}
 	}
+	/*dbg*/printf("\n");
 
 	// wypisywanie wyniku
 	for(yy = 0; yy < Y; ++yy) {
@@ -295,21 +351,23 @@ node* unionfindHead(int x) {
 	return r;
 }
 
-void unionfindJoin(int x, int y) {
+int unionfindJoin(int x, int y) {
 	//if(x==y) ... // tego nie rozważamy bo unikamy takich połączeń
 	node *xP = unionfindHead(x); // O(log(X+Y))
 	node *yP = unionfindHead(y);
-	if(xP == yP) return; // już połączone
+	if(xP == yP) return -1; // już połączone
 	if(xP->rank > yP->rank) {
 		node *t = xP;
 		xP = yP;
 		yP = t;
+		x = y;
 		// ew coś takiego: xP ^= yP ^= xP ^= yP;
 	}
 	// od teraz xP->rank <= yP->rank
 	xP->p = yP;
 	yP->rank += xP->rank;
 	yP->bulbs += xP->bulbs;
+	return x; // zwracamy numer pozycji, która się zmieniła
 }
 
 // czy urządzenie na pozycji pos jest ustalone i łączy w kierunku dir
@@ -400,6 +458,120 @@ void setRotation(int pos, int rot) {
 	}
 }
 
-void setBacktrackRotation(int pos, char rot) {
+std::vector<int> setBacktrackRotation(int pos, int rot) {
+	node &p = board[0][pos];
+	char ptype = 'A'+p.type;
+	std::vector<int> undoInfo;
+	p.type = -1-p.type;
+	p.rots = NULL;
+	p.rot = rot;
+	char posRel[] = {
+		pos%X<X-1?pos+1:-1, pos+X<XY?pos+X:-1, pos%X>=0?pos-1:-1, pos-X
+	};
+	switch(ptype) {
+		case 'A': case 'D':
+			if(posRel[0] >= 0 && connectable(posRel[0], 2))
+				undoInfo.push_back(unionfindJoin(pos, posRel[0]));
+			if(posRel[1] >= 0 && connectable(posRel[1], 3))
+				undoInfo.push_back(unionfindJoin(pos, posRel[1]));
+			if(posRel[2] >= 0 && connectable(posRel[2], 0))
+				undoInfo.push_back(unionfindJoin(pos, posRel[2]));
+			if(posRel[3] >= 0 && connectable(posRel[3], 1))
+				undoInfo.push_back(unionfindJoin(pos, posRel[3]));
+			break;
+		case 'B': case 'E':
+			if(posRel[rot] >= 0 && connectable(posRel[rot], (rot+2)%4))
+				undoInfo.push_back(unionfindJoin(pos, posRel[rot]));
+			//if(posRel[1+rot] >= 0) // tutaj zrobić heurezę z reorderingiem
+			//	makeUnconnectable(posRel[1+rot], (rot+3)%4);
+			if(posRel[2+rot] >= 0 && connectable(posRel[2+rot], rot))
+				undoInfo.push_back(unionfindJoin(pos, posRel[2+rot])); // nie ma modulo
+			//if(posRel[(3+rot)%4] >= 0)
+			//	makeUnconnectable(posRel[(3+rot)%4], rot+1);
+			break;
+		case 'C': case 'F':
+			if(posRel[rot] >= 0 && connectable(posRel[rot], (rot+2)%4))
+				undoInfo.push_back(unionfindJoin(pos, posRel[rot%4]));
+			if(posRel[(rot+1)%4] >= 0 && connectable(posRel[(rot+1)%4], (rot+3)%4))
+				undoInfo.push_back(unionfindJoin(pos, posRel[(rot+1)%4]));
+			break;
+		case 'G': case 'H':
+			if(posRel[rot] >= 0 && connectable(posRel[rot], (rot+2)%4))
+				undoInfo.push_back(unionfindJoin(pos, posRel[rot]));
+			if(posRel[(rot+1)%4] >= 0 && connectable(posRel[(rot+1)%4], (rot+3)%4))
+				undoInfo.push_back(unionfindJoin(pos, posRel[(rot+1)%4]));
+			if(posRel[(rot+2)%4] >= 0 && connectable(posRel[(rot+2)%4], rot))
+				undoInfo.push_back(unionfindJoin(pos, posRel[(rot+2)%4]));
+			break;
+		case 'I':
+			if(posRel[rot] >= 0 && connectable(posRel[rot], (rot+2)%4))
+				undoInfo.push_back(unionfindJoin(pos, posRel[rot]));
+	}
+	return undoInfo;
+}
+
+void backtrack() {
+	if(markHeap.size() == 0) {
+		printf("!");
+		return;
+	}
+	printf(".");
+	int posBat = markHeap.front();
+	std::pop_heap(markHeap.begin(), markHeap.end(), markHeapOrderByPoss());
+	markHeap.pop_back();
+
+	node &batt = board[0][posBat];
+	if(batt.type < 0) return; // te dwa nie powinny się zdarzyć
+	if(batt.rots == NULL) return;
+	batt.type = -1-batt.type;
+	int ii, pos, s;
+	for(lst<char> *r = batt.rots; r != NULL; r=r->tl) {
+		setRollback.push_back( std::pair<int,node*>(0,NULL));	// Oto strażnik.
+		std::vector<int> undo(setBacktrackRotation(posBat, r->hd)); // to undo set join
+		std::vector<int> undoHeap; // to undo heap add 
+
+		if(posBat-X >= 0 && ! (board[0][posBat-X].inHeap) && board[0][posBat-X].type >= 0) {
+			board[0][posBat-X].inHeap = 1;
+			markHeap.push_back(posBat-X); std::push_heap(markHeap.begin(), markHeap.end(), markHeapOrderByPoss());
+			undoHeap.push_back(posBat-X);
+		}
+		if(posBat+X < XY && ! (board[0][posBat+X].inHeap) && board[0][posBat+X].type >= 0) {
+			board[0][posBat+X].inHeap = 1;
+			markHeap.push_back(posBat+X); std::push_heap(markHeap.begin(), markHeap.end(), markHeapOrderByPoss());
+			undoHeap.push_back(posBat+X);
+		}
+		if(posBat%X > 0 && ! (board[0][posBat-1].inHeap) && board[0][posBat-1].type >= 0) {
+			board[0][posBat-1].inHeap = 1;
+			markHeap.push_back(posBat-1); std::push_heap(markHeap.begin(), markHeap.end(), markHeapOrderByPoss());
+			undoHeap.push_back(posBat-1);
+		}
+		if((posBat+1)%X > 0 && ! (board[0][posBat+1].inHeap) && board[0][posBat+1].type >= 0) {
+			board[0][posBat+1].inHeap = 1;
+			markHeap.push_back(posBat+1); std::push_heap(markHeap.begin(), markHeap.end(), markHeapOrderByPoss());
+			undoHeap.push_back(posBat+1);
+		}
+
+		backtrack();
+
+		// undo add to heap
+		for(ii=undoHeap.size()-1; ii>=0; --ii)
+			board[0][undoHeap[ii]].inHeap = 0;
+		s=markHeap.size()-1;
+		for(ii=s; ii>=0; --ii)
+			if(!board[0][markHeap[ii]].inHeap) {
+				markHeap[ii] = markHeap[s--];
+				markHeap.pop_back();
+			}
+
+		for(int i=undo.size()-1; i>=0; --i) { // undo update sets
+			pos = undo[i];
+			board[0][pos].p->rank -= board[0][pos].rank;
+			board[0][pos].p->bulbs -= board[0][pos].bulbs;
+			board[0][pos].p = board[0]+pos;
+		}
+	}
+	batt.type = -1-batt.type;
+	markHeap.push_back(posBat);
+	std::push_heap(markHeap.begin(), markHeap.end(), markHeapOrderByPoss());
 }
 
