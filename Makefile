@@ -1,25 +1,21 @@
 CXX         =   clang++
-CXXFLAGS    =   -O0 -g\
-                -W -Wall -Wshadow -Wformat \
+CXXFLAGS    =   -O0 -g -ggdb3\
+                -W -Wall -Wshadow -Wformat\
                 -Wsequence-point -Wunused\
 		        -Wuninitialized -Wfloat-equal -ansi\
 		        -pedantic -Weffc++
 LDFLAGS     =   -lm
 
-c:
+.PHONY: clean doxy all
 
-t: t.w
-	cweave t.w && xetex t.tex
-	ctangle t.w - t.cpp && clang++ -W -Wall -Wshadow\
-		-Wformat -Wsequence-point -Wunused\
-		-Wuninitialized -Wfloat-equal -ansi\
-		-pedantic -Weffc++ -g -O0 -lm t.cpp -o t
-texclean:
-	rm -f t.c t.idx t.log t.scn t.tex t.toc 
-progclean:
+all: t doxy
+	./tests/tester.sh ./t
+
+t: t.cpp
+
+clean:
 	rm -f t
-clean: texclean progclean
-	rm c
+	rm -rf doc
 
-hardclean: clean
-	rm -f t.pdf t.dvi t.cpp
+doxy: t.cpp
+	doxygen
