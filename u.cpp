@@ -1,171 +1,99 @@
 #include <cstdio>
-#include <cstdlib>
-#include <ctime>
-#include <utility>
-#include <algorithm>
+#include <vector>
 
-typedef std::pair<int,int> stampedUnion;
 typedef unsigned int uint;
-typedef std::pair<int,stampedUnion> stampedRank;
+typedef std::pair<int,int> stampedUnion; /**< Struktura wskazująca na operację union: id na stosie  x  stamp. */
+typedef std::pair<int,int> unionDescr; /**< Struktura opisująca operację union na stosie:  priorytet  x  stamp. */
+typedef std::pair<stampedUnion, int> stampedRank; /**< Struktura: wskazanie na union  x  wysokość drzewa następująca po wskazanej danej operacji union. */
 
-/** Po prostu swap.
+/** Klasa bazowa dla operacji union-set.
+ * By użyć w dowolnej klasie Z, ta klasa musi
+ *   -# dziedziczyć publicznie po set<Z>
+ *   -# zadeklarować dwie zmienne statyczne:
+ *   	\code
+ *   	unsigned int setStamp;
+ *   	std::vector<unionDescr> setH;
+ *   	\endcode
  */
 template <class T>
-void swap(T &a, T &b) {
-	T tmp = a;
-	a = b;
-	b = tmp;
-}
-
-/** Klasa bazowa dla operacji union-set. */
-template <class T> // oppa oppa mixin style!
 class set {
-	/** Helper, przydatny przy CRTP; zwraca pointer na bieżący obiekt */
-	T* self() { return static_cast<T*>(this); }
-public:
-	/** Konstruktor, który niewiele robi. */
-	set() : rL(NULL), rS(0), rP(0) { p = static_cast<T*>(this); }
-
 	T* p; /**< Link na node nadrzędny. */
 	stampedUnion pU; /**< Wskazanie na opis operacji. Pozwala stwierdzić, czy link jest żywy. */
-	stampedRank *rL; /**< Lista ranków. Jest listą par (r,u) gdzie r to rank zaraz po wykonaniu union u. */
-	uint rS; /**< Lista ranków - rozmiar listy. */
-	uint rP; /**< Lista ranków - pointer na koniec listy. */
+	std::vector<stampedRank> rL; /**< Lista ranków. Jest listą par (r,u) gdzie r to rank zaraz po wykonaniu union u. */
 
-	/** Czy link wychodzący jest żywy. Jeśli nie to go usuwa. */
+	/** Czy link wychodzący jest żywy, jeśli nie to go usuwa. Zakłada, że p != NULL. */
 	bool isLinkAlive() {
-		if( self()->usH[pU.first].second == pU.second )
-			return true;
-		p = self();
-		return false;
+		return ( pU.first < T::setH.size() && T::setH[pU.first].second == pU.second ) // jeśli link żywy to zwróci true
+			|| (p = NULL); // jeśli nie to zwróci NULL == false
 	}
 
-	/** Zwraca rank. Jeśli trzeba to redukuje wartość rP. */
-	uint getRank() {
-		if(rS == 0) return 1;
-		int l = -1, u = rP+1, i;
-		for(i = rP>>1; l+1<u; i=(l+u)>>1)
-			if( self()->usH[rL[i].second.first].second == rL[i].second.second )
+	/** Zwraca rank. Jeśli trzeba to skraca rL. */
+	uint getRank() { // O(log log n)
+		int l = -1, u = rL.size(), i;
+		for(i = (l+u)>>1; l+1<u; i=(l+u)>>1)
+			if( T::setH[rL[i].first.first].second == rL[i].first.second )
 				l = i;
 			else u = i;
-		if(l==-1)
-			return 1;
-		rP = l+1;
-		return rL[l].first;
+		rL.resize(l+1);
+		if(l==-1) return 1;
+		return rL.back().second;
 	}
 
+	/** Swap. Działa, o ile a i b to różne obiekty. */
+	template <class X> void swap(X &a, X &b) {
+		a ^= b ^= a ^= b;
+	}
+public:
+	/** Konstruktor, który niewiele robi. */
+	set() : p(NULL) {}
+
 	/** Wyszukiwanie reprezentanta zbioru. Przy okazji - implicite, używając isLinkAlive() - usuwa martwe linki. */
-	T* find() {
-		T* n = self();
-		while(n->p != n && n->isLinkAlive())
+	T* find() { // O(log n)
+		T* n = static_cast<T*>(this);
+		while(n->p != NULL && n->isLinkAlive())
 			n = n->p;
 		return n;
 	}
 
 	/** Operacja union o priorytecie prio między bieżącym elementem a oo. */
-	void unionW(T* oo, int prio) {
+	void unionW(T* oo, int prio) { // O(log n)
 		T *pp = find(), // restoring phase
 			*qq = oo->find();
-		if(pp->getRank() > qq->getRank())
-			swap(pp,qq); // od teraz pp jest mniejsze niż qq
+		if(pp == qq) return;
 		uint ppr = pp->getRank(),
 			 qqr = qq->getRank();
-		if(!self()->usHP || prio > self()->usH[self()->usHP-1].first) { // linking phase
-			if(!self()->usH)
-				self()->usH = (stampedUnion*)realloc(self()->usH, (self()->usHS = (self()->usHS+1)<<1)*sizeof(stampedUnion));
-			self()->usH[self()->usHP] = stampedUnion(self()->usHP++, self()->usST++);
+		if(ppr > qqr) {
+			swap(ppr,qqr);
+			swap(pp,qq);
 		}
-		stampedUnion L = stampedUnion(self()->usHP, self()->usST);
+		if(T::setH.empty() || prio > T::setH.back().first) // linking phase
+			T::setH.push_back(unionDescr(prio, T::setStamp++));
 		pp->p = qq;
-		pp->pU = L;
-		if(qq->rP == qq->rS)
-			qq->rL = (stampedRank*)realloc(qq->rL, (qq->rS = (qq->rS+1)*2)*sizeof(stampedRank));
-		qq->rL[(qq->rP)++] = stampedRank(ppr+qqr,L); // rank updating phase
+		pp->pU = stampedUnion(T::setH.size()-1, T::setH.back().second);
+		qq->rL.push_back(pp->pU, std::max(ppr+1,qqr)); // rank updating phase
 	}
 
-	/** Cofanie. Anuluje tyle cofnięć, by union o najwyższym priorytecie przestał obowiązywać. */
-	static void backtrack() {
-		if(T::usHP > 0)
-			T::usHP--;
+	/** Cofanie. Anuluje tyle cofnięć, by ostatni union o najwyższym priorytecie przestał obowiązywać. */
+	void backtrack() {
+		if(!T::setH.empty())
+			T::setH.pop_back();
 	}
 
 };
 
 class test : public set<test> {
 public:
-	static stampedUnion *usH;
-	static uint usHS; // size
-	static uint usHP; // pointer
-	static uint usST; // stamp
-
-	int x;
+	static std::vector<unionDescr> setH;
+	static uint setStamp;
 };
-stampedUnion* test::usH = NULL;
-uint test::usHP = 0;
-uint test::usHS = 0;
-uint test::usST = 0;
+std::vector<unionDescr> test::setH = std::vector<unionDescr>();
+uint test::setStamp = 0;
 
-uint NN = 20;
-uint RR = 30;
-std::pair<int,int> *RRS;
-int *RRD;
-
-int* mksnap(test* tab) {
-	int* nt = new int[NN];
-	for(uint i=0;i<NN;++i)
-		nt[i] = tab[i].find()->x;
-	return nt;
-}
-bool snapeq(int *a, int *b) {
-	for(uint i=0;i<NN;++i)
-		if(a[i]!=b[i])
-			return false;
-	return true;
-}
-void mktest(uint it, test *tt, int beforePrio = 0) {
-	if(it >= RR)
-		return;
-	int* before = mksnap(tt);
-	printf(">> %2d: %3d <-> %3d #%2d%s:", it, RRS[it].first, RRS[it].second, RRD[it], RRD[it] >= beforePrio ? " !!" : "   ");
-	for(uint i=0;i<NN;++i) printf(" %2d",tt[i].find()->x);
-	printf("\n                          ");
-	tt[RRS[it].first].unionW(tt+RRS[it].second, RRD[it]);
-	for(uint i=0;i<NN;++i) printf(" %2d",tt[i].find()->x);
-	printf("\n");
-
-	mktest(it+1, tt, std::max(beforePrio, RRD[it]));
-
-	if(RRD[it] >= beforePrio) {
-		printf("<< %2d\n",it);
-		test::backtrack();
-		int* after = mksnap(tt);
-		if(! snapeq(before, after)) {
-			printf("   !! NO :< %d\n    ", it);
-			for(uint i=0;i<NN;++i) printf(" %2d",before[i]);
-			printf("\n    ");
-			for(uint i=0;i<NN;++i) printf(" %2d",after[i]);
-			printf("\n");
-		}
-	}
-	return;
-}
+typedef std::vector<test>::iterator testItrt;
 
 int main() {
-	srandom(time(NULL));
-	test *tab = new test[NN];
-	for(uint i=0;i<NN;++i) tab[i].x=i;
-	RRS = new std::pair<int,int> [RR];
-	RRD = new int [RR];
-	for(uint i=0;i<RR;++i) {
-		RRS[i] = std::pair<int,int>(random()%NN, random()%NN);
-		RRD[i] = ((unsigned int)random())%NN;
-		printf("(%d,%d |%d) ", RRS[i].first, RRS[i].second, RRD[i]);
-	}
-	printf("\n");
-
-	mktest(0, tab);
-
-	delete [] tab;
+	uint NN = 6;
+	std::vector<test> test(NN);
 	return 0;
 }
 
