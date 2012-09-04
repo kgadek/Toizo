@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <vector>
+#include <cassert>
 
 typedef unsigned int uint;
 typedef std::pair<int,int> stampedUnion; /**< Struktura wskazująca na operację union: id na stosie  x  stamp. */
@@ -23,7 +24,7 @@ class set {
 
 	/** Czy link wychodzący jest żywy, jeśli nie to go usuwa. Zakłada, że p != NULL. */
 	bool isLinkAlive() {
-		return ( pU.first < T::setH.size() && T::setH[pU.first].second == pU.second ) // jeśli link żywy to zwróci true
+		return ( pU.first < (int)T::setH.size() && T::setH[pU.first].second == pU.second ) // jeśli link żywy to zwróci true
 			|| (p = NULL); // jeśli nie to zwróci NULL == false
 	}
 
@@ -41,8 +42,10 @@ class set {
 
 	/** Swap. Działa, o ile a i b to różne obiekty. */
 	template <class X> void swap(X &a, X &b) {
-		a ^= b ^= a ^= b;
+		X t = a;
+		a = b; b = t;
 	}
+
 public:
 	/** Konstruktor, który niewiele robi. */
 	set() : p(NULL) {}
@@ -70,11 +73,11 @@ public:
 			T::setH.push_back(unionDescr(prio, T::setStamp++));
 		pp->p = qq;
 		pp->pU = stampedUnion(T::setH.size()-1, T::setH.back().second);
-		qq->rL.push_back(pp->pU, std::max(ppr+1,qqr)); // rank updating phase
+		qq->rL.push_back(stampedRank(pp->pU, std::max(ppr+1,qqr))); // rank updating phase
 	}
 
 	/** Cofanie. Anuluje tyle cofnięć, by ostatni union o najwyższym priorytecie przestał obowiązywać. */
-	void backtrack() {
+	static void backtrack() {
 		if(!T::setH.empty())
 			T::setH.pop_back();
 	}
@@ -89,11 +92,56 @@ public:
 std::vector<unionDescr> test::setH = std::vector<unionDescr>();
 uint test::setStamp = 0;
 
+
 typedef std::vector<test>::iterator testItrt;
 
+template <class T>
+struct quadr {
+	T first, second, third, fourth;
+};
+
+void comparator(std::vector<test> &tab, uint s, const int cmp[]) {
+	for(uint i=0;i<s;++i)
+		assert(tab[i].find() == &tab[cmp[i]]);
+}
+
 int main() {
-	uint NN = 6;
-	std::vector<test> test(NN);
+	const uint TABSIZE = 6;
+	std::vector<test> tab(TABSIZE);
+	comparator(tab, TABSIZE, (int []){0,1,2,3,4,5});
+	{
+		tab[0].unionW(&tab[1], 5);
+		comparator(tab, TABSIZE, (int []){1,1,2,3,4,5});
+		{
+			tab[2].unionW(&tab[3], 4);
+			comparator(tab, TABSIZE, (int []){1,1,3,3,4,5});
+			{
+				tab[0].unionW(&tab[2], 6);
+				comparator(tab, TABSIZE, (int []){3,3,3,3,4,5});
+				{
+					tab[4].unionW(&tab[5], 1);
+					comparator(tab, TABSIZE, (int []){3,3,3,3,5,5});
+					{
+						tab[1].unionW(&tab[5], 6);
+						comparator(tab, TABSIZE, (int []){3,3,3,3,3,3});
+						test::backtrack();
+					}
+				}
+				test::backtrack();
+			}
+		}
+		test::backtrack();
+
+		tab[5].unionW(&tab[3], 1);
+		comparator(tab, TABSIZE, (int []){0,1,2,3,4,3});
+		{
+			tab[2].unionW(&tab[3], 1);
+			comparator(tab, TABSIZE, (int []){0,1,3,3,4,3});
+			test::backtrack();
+		}
+		test::backtrack();
+	}
+	comparator(tab, TABSIZE, (int []){0,1,2,3,4,5});
 	return 0;
 }
 
