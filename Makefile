@@ -8,17 +8,15 @@ LDFLAGS     =   -lm
 
 .PHONY: clean doxy all
 
-all: t u doxy
-	./tests/tester.sh ./t
+all: t doxy
+#	./tests/tester.sh ./t
 
-t: t.cpp
-
-u: u.cpp set.h
+t: t.cpp set.h
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(<:%.cpp=%.cpp) -o $@
 
 clean:
-	rm -f t u tags
+	rm -f t tags
 	rm -rf doc
 
-doxy: t.cpp u.cpp set.h
+doxy: t.cpp set.h
 	doxygen

@@ -2,77 +2,57 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include "set.h"
 
 typedef unsigned int uint;
 typedef unsigned char uchar;
 
-struct node {
-	char type; //!< Typ obiektu: A=0, B=1, ...
-	char rot; //!< Obrót obiektu: 0 = bez obrotu, 1 = obrót o 90 stopni ("clockwise").
-	node* p; //!< Dla union-findSet: pointer na ojca.
-	uint s; //!< Dla union-findSet: rozmiar poddrzewa.
+struct node : public set<node> {
+	char type; /**< Typ obiektu. */
+	char rot; /**< Obrót obiektu o wielokrotność \f$90^\circ\f$ "clockwise". */
 };
-char rotations[] = {1,2,4,1,2,4,4,4,4}; //!< Ilość obrotów kolejnych typów klocków (np. 'A' jest symetryczny, ma jeden wartościowy obrót).
+char rots[] = {1,2,4,1,2,4,4,4,4}; /**< Ilość obrotów do rozważenia dla kolejnych typów klocków. */
 
 
-uint X, //!< Ilość kolumn.
-	 Y, //!< Ilość wierszy.
-	 XY; //!< Taki mały helper; XY = X*Y.
-uint batt_pos; //!< Pozycja baterii.
+uint X, /**< Ilość kolumn. */
+	 Y, /**< Ilość wierszy. */
+	 XY; /**< Taki mały helper; XY = X*Y. */
+uint batt_pos; /**< Pozycja baterii. */
 
-node **board; //!< Reprezentacja planszy.
-node *brd; //!< brd = (*board).
+node **board; /**< Reprezentacja planszy. */
+node *brd; /**< brd = (*board). */
 
 
 void read_board();
 void print_board();
 
-node** rollbackHeap;
-uint rollbackHeapHead = 0;
-node* findSet(node*);
-void commitOrRollback(const bool);
-void unionSet(node* const, node* const);
 
-/**
- * Główna metoda.
+/** Główna metoda.
  */
 int main() {
 	read_board();
 	print_board();
-
-	// nie ma delete, OS po nas posprząta
 	return 0;
 }
 
 
-/**
- * Wczytujemy wierszami, maks. 1500 znaków na raz.
- *
+/** Wczytujemy wierszami, maks. 1500 znaków na raz.
  * Mały ale ważny komentarz: zakładamy, że na wejściu nie ma zbędnych białych znaków.
  */
 #define INPUTLEN 1500
 
-/**
- * Wczytywanie planszy.
- *
- * Alokuje reprezentację; ustawia zmienne X,Y i XY; znajduje baterię.
+/** Wczytywanie planszy.
+ * Alokuje reprezentację; ustawia zmienne ::X, ::Y i ::XY. Znajduje baterię (ustala ::batt_pos).
  */
 void read_board() {
-
 	char input[INPUTLEN];
 	scanf(" %d %d ", &X, &Y);
 	XY = X*Y;
-	rollbackHeap = (node**)malloc(2*XY*sizeof(node*));
 
-	// board[x][y] == (*board)[i] == brd[i]   dla   i == X*y + x
+	// Podwójna notacja: board[x][y] <==> brd[i] dla i == X*y + x
 	board = (node**)malloc(Y*sizeof(node*));
 	brd = (*board) = (node*)malloc(XY*sizeof(node));
 	for(uint i=0;i<Y;++i) board[i] = *board + i*X;
-	for(uint i=0;i<XY;++i, ++brd) { // ustawianie .p .s
-		(*brd).p = brd;
-		(*brd).s = 1;
-	}
-	brd = (*board);
 
 	uint board_pos = 0;
 	char *inp;
@@ -87,9 +67,7 @@ void read_board() {
 }
 
 
-/**
- * Wyświetlanie planszy.
- *
+/** Wyświetlanie planszy.
  * Nic ciekawego tu się nie dzieje.
  */
 void print_board() {
@@ -104,54 +82,4 @@ void print_board() {
 	}
 }
 
-
-/**
- * Wyszukiwanie reprezentanta zbioru.
- *
- * Używamy heurezy łączenia wg rozmiarów, więc koszt czasowy to O(log n).
- */
-node* findSet(node *n) {
-	while(n->p != n) n = n->p;
-	return n;
-}
-
-
-/**
- * Commit na zbiorach.  
- */
-void commitSet() {
-	if(rollbackHeapHead == 0 || rollbackHeap[rollbackHeapHead-1] != 0)
-		rollbackHeap[rollbackHeapHead++] = 0;
-}
-
-
-/**
- * Rollback do ostatniego commita (na zbiorach).
- */
-void rollbackSet() {
-	if(rollbackHeap[rollbackHeapHead-1] == 0 && rollbackHeapHead > 0)
-		--rollbackHeapHead;
-	while(rollbackHeapHead > 0 && rollbackHeap[--rollbackHeapHead] != 0) {
-		node *n = rollbackHeap[rollbackHeapHead];
-		n->p->s -= n->s;
-		n->p = n;
-	}
-}
-
-
-/**
- * Operacja union. 
- */
-void unionSet(node* n, node* m) {
-	if(findSet(n) == findSet(m)) return;
-	if(n->s < m->s) {
-		n->p = m;
-		m->s += n->s;
-		rollbackHeap[rollbackHeapHead++] = n;
-	} else {
-		m->p = n;
-		n->s += m->s;
-		rollbackHeap[rollbackHeapHead++] = m;
-	}
-}
 

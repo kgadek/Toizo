@@ -1,0 +1,3 @@
+[submodule "Unionfind-cpp"]
+	path = Unionfind-cpp
+	url = git@github.com:kgadek/Unionfind-cpp.git
