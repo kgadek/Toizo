@@ -11,12 +11,12 @@ LDFLAGS     =   -lm
 all: t doxy
 #	./tests/tester.sh ./t
 
-t: t.cpp set.h
+t: t.cpp Unionfind-cpp/set.h
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(<:%.cpp=%.cpp) -o $@
 
 clean:
 	rm -f t tags
 	rm -rf doc
 
-doxy: t.cpp set.h
+doxy: t.cpp Unionfind-cpp/set.h
 	doxygen
