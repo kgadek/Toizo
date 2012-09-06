@@ -4,12 +4,14 @@
 #include <cstdlib>
 #include "Unionfind-cpp/set.h"
 
+using namespace std;
+
 typedef unsigned int uint;
 typedef unsigned char uchar;
 
 struct node : public set<node> {
 	char type; /**< Typ obiektu. Na początku ujemna, gdy dodatnia -> ustalona pozycja. */
-	char rot;  /**< Obrót obiektu o wielokrotność \f$90^\circ\f$ "clockwise". */
+	char rot;  /**< Dopuszczalne obroty obiektu. */
 };
 char rots[]        = {1,2,4,1,2,4,4,4,4};               /**< Ilość obrotów do rozważenia dla kolejnych typów klocków. */
 char rot2numrots[] = {0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4}; /**< Konwersja możliwych obrotów do ich liczby. */
@@ -23,22 +25,30 @@ node **board;  /**< Reprezentacja planszy. */
 node *brd;     /**< brd = (*board). */
 
 
-void __dbgprint(const char*);
+void __dbgprint(const char*, int elem = -1, uint shift = 0);
+uint __dbgbacktracks = 0;
+vector<uint> __dbgbacktracklvls;
 void read_board();
 void print_board();
 void h1();
+void backtrack(uint);
+
 /** Ustaw pozycję. @param r Pozycja w notacji binarnej (1,2,4,8). */
 inline void make_setr(uint p, char r)         { brd[p].type      = abs(brd[p].type);      brd[p].rot      = r; }
 /** Ustaw pozycję. @param r Pozycja w notacji binarnej (1,2,4,8). */
 inline void make_setr(uint x, uint y, char r) { board[y][x].type = abs(board[y][x].type); board[y][x].rot = r; }
 inline void make_set(uint p)         { brd[p].type      = abs(brd[p].type); }         /**< Ustaw znacznik 'ustalony'. */
 inline void make_set(uint x, uint y) { board[y][x].type = abs(board[y][x].type); }    /**< Ustaw znacznik 'ustalony'. */
+inline void make_unset(uint p)         { brd[p].type      = -abs(brd[p].type); }      /**< Usuń znacznik 'ustalony'. */
+inline void make_unset(uint x, uint y) { board[y][x].type = -abs(board[y][x].type); } /**< Usuń znacznik 'ustalony'. */
 inline bool is_set(uint p)        { return brd[p].type      > 0; }                    /**< Czy ma znacznik 'ustalony'? */
 inline bool is_set(uint x,uint y) { return board[y][x].type > 0; }                    /**< Czy ma znacznik 'ustalony'? */
 inline bool has_rotation(uint p, char r)         { return brd[p].rot      & (1<<r); } /**< Czy rotacja r jest możliwa? @param r Obroty, notacja naturalna (0,1,2,3). */
 inline bool has_rotation(uint x, uint y, char r) { return board[y][x].rot & (1<<r); } /**< Czy rotacja r jest możliwa? @param r Obroty, notacja naturalna (0,1,2,3). */
 inline char get_chtype(uint p)         { return abs(brd[p].type)      + 'A'-1; }      /**< Zwraca typ. */
 inline char get_chtype(uint x, uint y) { return abs(board[y][x].type) + 'A'-1; }      /**< Zwraca typ. */
+inline char get_chrots(uint p)         { return brd[p].rot; }                         /**< Zwraca dostępne rotacje. */
+inline char get_chrots(uint x, uint y) { return board[y][x].rot; }                    /**< Zwraca dostępne rotacje. */
 inline char get_chrot(uint p) {                                                       /**< Zwraca rotację. */
 	if(brd[p].rot > 2) return brd[p].rot==4?'3':'4';
 	else               return brd[p].rot==2?'2':'1';
@@ -47,11 +57,11 @@ inline char get_chrot(uint x, uint y) {                                         
 	if(board[y][x].rot > 2) return board[y][x].rot==4?'3':'4';
 	else                    return board[y][x].rot==1?'1':'2';
 }
-inline void rem_rotation(uint p, char r) {         /**< Usuwa rotację z listy opcji. @param r Rotacja w notacji naturalnej (0,1,2,3). */
+inline void rem_rotation(uint p, char r) {                                            /**< Usuwa opcję rotacji. @param r Rotacja w notacji naturalnej (0,1,2,3). */
 	brd[p].rot &= (0xF - (1<<r));
 	if(rot2numrots[brd[p].rot] <= 1) make_set(p);
 }
-inline void rem_rotation(uint x, uint y, char r) { /**< Usuwa rotację z listy opcji. @param r Rotacja w notacji naturalnej (0,1,2,3). */
+inline void rem_rotation(uint x, uint y, char r) {                                    /**< Usuwa opcję rotacji. @param r Rotacja w notacji naturalnej (0,1,2,3). */
 	board[y][x].rot &= (0xF - (1<<r));
 	if(rot2numrots[board[y][x].rot] <= 1) make_set(x,y);
 }
@@ -63,7 +73,47 @@ int main() {
 	__dbgprint("Po wczytaniu i H2");
 	h1();
 	__dbgprint("Po H1");
+
+	// backtrack
+	char opts = get_chrots(batt_pos);
+	make_set(batt_pos);
+	__dbgbacktracklvls.push_back(0);
+	for(char i=1; i<=8; i<<=1) {
+		if(! (i & opts) ) continue;
+		++__dbgbacktracklvls[0];
+		brd[batt_pos].rot = i;
+		__dbgprint("Backtrack: pozycja baterii", batt_pos, 0);
+		backtrack(1);
+	}
+	printf("Call statistics:________________________________________\n");
+	printf("  * \t%-20s #%4d\n", "backtrack", __dbgbacktracks);
+	printf("Backtrack statistics:___________________________________\n");
+	uint __dbgtmp = 0;
+	for(vector<uint>::iterator it = __dbgbacktracklvls.begin(); it!=__dbgbacktracklvls.end(); ++it, ++__dbgtmp) {
+		printf("  %-2d  --  %2d ", __dbgtmp, *it);
+		for(uint i=0; i<*it; ++i) printf("|");
+		printf("\n");
+	}
 	return 0;
+}
+
+
+void backtrack(uint depth) {
+	++__dbgbacktracks;
+	if(__dbgbacktracklvls.size() < depth) __dbgbacktracklvls.resize(depth);
+	++__dbgbacktracklvls[depth];
+	uint p=0;
+	for(p=0;(p<XY) && is_set(p); ++p) ;			// TODO: this is a very poor select
+	if(p==XY) return;
+	char opts = get_chrots(p);
+	make_set(p);
+	for(char i=1; i<=8; i<<=1) {
+		if(! (i & opts) ) continue;
+		brd[p].rot = i;
+		__dbgprint("Backtrack", p, depth);
+		backtrack(depth+1);
+	}
+	make_unset(p);
 }
 
 
@@ -128,12 +178,13 @@ void print_board() {
 
 
 /** Wyświetlanie planszy w trybie debug. */
-void __dbgprint(const char *str) {
+void __dbgprint(const char *str, int elem, uint shift) {
 	uint x,y,i;
-	printf("%s\n", str);
+	printf("%*s[%2d]: %2d > %s\n", shift<<1, "", shift, elem, str);
 	for(y=0;y<Y;++y) {
+		printf("%*s", (shift<<1)+3, "|");
 		for(x=0;x<X;++x) {
-			printf(" %c%c",is_set(x,y)?'*':' ', get_chtype(x,y));
+			printf("    %c%c",is_set(x,y)?'*':' ', get_chtype(x,y));
 			for(i=0;i<4;++i)
 				printf("%c", has_rotation(x,y,i)? (is_set(x,y)?get_chrot(x,y):'+'):(is_set(x,y)?' ':'_'));
 		}
