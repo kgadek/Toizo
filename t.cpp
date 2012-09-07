@@ -2,69 +2,37 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include "Unionfind-cpp/set.h"
+#include <cstring>
+#include <vector>
+#include <map>
+#include "n.h"
 
 using namespace std;
 
 typedef unsigned int uint;
 typedef unsigned char uchar;
 
-struct node : public set<node> {
-	char type; /**< Typ obiektu. Na początku ujemna, gdy dodatnia -> ustalona pozycja. */
-	char rot;  /**< Dopuszczalne obroty obiektu. */
-};
-char rots[]        = {1,2,4,1,2,4,4,4,4};               /**< Ilość obrotów do rozważenia dla kolejnych typów klocków. */
-char rot2numrots[] = {0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4}; /**< Konwersja możliwych obrotów do ich liczby. */
 
 
-uint X,        /**< Ilość kolumn. */
-	 Y,        /**< Ilość wierszy. */
-	 XY;       /**< Taki mały helper; xy = x*y. */
-uint batt_pos; /**< Pozycja baterii. */
-node **board;  /**< Reprezentacja planszy. */
-node *brd;     /**< brd = (*board). */
+uint X,               /**< Ilość kolumn. */
+	 Y,               /**< Ilość wierszy. */
+	 XY;              /**< Taki mały helper; xy = x*y. */
+uint batt_pos;        /**< Pozycja baterii. */
+node **board;         /**< Reprezentacja planszy. */
+node *brd;            /**< brd = (*board). */
+vector<node*> lbulbs; /**< Zbiór wszystkich żarówek. */
 
+map<const char*, uint, eqstr> __dbg_calls;
+vector<uint> __dbgbacktracklvls;
 
 void __dbgprint(const char*, int elem = -1, uint shift = 0);
-uint __dbgbacktracks = 0;
-vector<uint> __dbgbacktracklvls;
+
+inline uint bulbs_connected();
 void read_board();
 void print_board();
 void h1();
 void backtrack(uint);
 
-/** Ustaw pozycję. @param r Pozycja w notacji binarnej (1,2,4,8). */
-inline void make_setr(uint p, char r)         { brd[p].type      = abs(brd[p].type);      brd[p].rot      = r; }
-/** Ustaw pozycję. @param r Pozycja w notacji binarnej (1,2,4,8). */
-inline void make_setr(uint x, uint y, char r) { board[y][x].type = abs(board[y][x].type); board[y][x].rot = r; }
-inline void make_set(uint p)         { brd[p].type      = abs(brd[p].type); }         /**< Ustaw znacznik 'ustalony'. */
-inline void make_set(uint x, uint y) { board[y][x].type = abs(board[y][x].type); }    /**< Ustaw znacznik 'ustalony'. */
-inline void make_unset(uint p)         { brd[p].type      = -abs(brd[p].type); }      /**< Usuń znacznik 'ustalony'. */
-inline void make_unset(uint x, uint y) { board[y][x].type = -abs(board[y][x].type); } /**< Usuń znacznik 'ustalony'. */
-inline bool is_set(uint p)        { return brd[p].type      > 0; }                    /**< Czy ma znacznik 'ustalony'? */
-inline bool is_set(uint x,uint y) { return board[y][x].type > 0; }                    /**< Czy ma znacznik 'ustalony'? */
-inline bool has_rotation(uint p, char r)         { return brd[p].rot      & (1<<r); } /**< Czy rotacja r jest możliwa? @param r Obroty, notacja naturalna (0,1,2,3). */
-inline bool has_rotation(uint x, uint y, char r) { return board[y][x].rot & (1<<r); } /**< Czy rotacja r jest możliwa? @param r Obroty, notacja naturalna (0,1,2,3). */
-inline char get_chtype(uint p)         { return abs(brd[p].type)      + 'A'-1; }      /**< Zwraca typ. */
-inline char get_chtype(uint x, uint y) { return abs(board[y][x].type) + 'A'-1; }      /**< Zwraca typ. */
-inline char get_chrots(uint p)         { return brd[p].rot; }                         /**< Zwraca dostępne rotacje. */
-inline char get_chrots(uint x, uint y) { return board[y][x].rot; }                    /**< Zwraca dostępne rotacje. */
-inline char get_chrot(uint p) {                                                       /**< Zwraca rotację. */
-	if(brd[p].rot > 2) return brd[p].rot==4?'3':'4';
-	else               return brd[p].rot==2?'2':'1';
-}
-inline char get_chrot(uint x, uint y) {                                               /**< Zwraca rotację. */
-	if(board[y][x].rot > 2) return board[y][x].rot==4?'3':'4';
-	else                    return board[y][x].rot==1?'1':'2';
-}
-inline void rem_rotation(uint p, char r) {                                            /**< Usuwa opcję rotacji. @param r Rotacja w notacji naturalnej (0,1,2,3). */
-	brd[p].rot &= (0xF - (1<<r));
-	if(rot2numrots[brd[p].rot] <= 1) make_set(p);
-}
-inline void rem_rotation(uint x, uint y, char r) {                                    /**< Usuwa opcję rotacji. @param r Rotacja w notacji naturalnej (0,1,2,3). */
-	board[y][x].rot &= (0xF - (1<<r));
-	if(rot2numrots[board[y][x].rot] <= 1) make_set(x,y);
-}
 
 
 /** Główna metoda. */
@@ -75,22 +43,47 @@ int main() {
 	__dbgprint("Po H1");
 
 	// backtrack
-	char opts = get_chrots(batt_pos);
-	make_set(batt_pos);
+	char opts = get_chrots(brd[batt_pos]), pr = 4, conns, j, cnntd;
+	make_set(brd[batt_pos]);
 	__dbgbacktracklvls.push_back(0);
 	for(char i=1; i<=8; i<<=1) {
-		if(! (i & opts) ) continue;
+		if(! (i & opts) )
+			continue;
 		++__dbgbacktracklvls[0];
 		brd[batt_pos].rot = i;
+		conns = rotate_bin_wbin(type2conns[brd[batt_pos].type], i>>1);
+		for(char j=1; j<=8; j<<=1) { // dla każdego połączenia wychodzącego
+			if(! (j & conns) )
+				continue;
+			cnntd = pos_goto(batt_pos, j);
+			if(cnntd < 0                                  // czy wewn. planszy
+					|| !is_set(brd[cnntd])                // czy ustalony
+					|| !does_connects(brd[cnntd], rotate_bin(j,2))) // czy łączy w tą stronę
+				continue;
+			printf("%*sŁączę %d <-> %d\n", 0, "", batt_pos, cnntd);
+			++__dbg_calls["node::unionW"];
+			brd[cnntd].unionW(brd[batt_pos], pr--);
+		}
 		__dbgprint("Backtrack: pozycja baterii", batt_pos, 0);
 		backtrack(1);
+		++__dbg_calls["node::backtrack"];
+		node::backtrack(); // cofnij połączenia union-find
 	}
+
 	printf("Call statistics:________________________________________\n");
-	printf("  * \t%-20s #%4d\n", "backtrack", __dbgbacktracks);
+	uint __dbg_sumcalls = 0;
+	for(map<const char*, uint, eqstr>::iterator it = __dbg_calls.begin(); it != __dbg_calls.end(); ++it)
+		__dbg_sumcalls += (*it).second;
+	for(map<const char*, uint, eqstr>::iterator it = __dbg_calls.begin(); it != __dbg_calls.end(); ++it) {
+		printf("  * \t%-20s #%8d (%5.2f)    ", (*it).first, (*it).second, 100.0*(*it).second/__dbg_sumcalls);
+		uint bars = (uint)(50.0*(*it).second/__dbg_sumcalls);
+		while(bars-- > 0) printf("|");
+		printf("\n");
+	}
 	printf("Backtrack statistics:___________________________________\n");
 	uint __dbgtmp = 0;
 	for(vector<uint>::iterator it = __dbgbacktracklvls.begin(); it!=__dbgbacktracklvls.end(); ++it, ++__dbgtmp) {
-		printf("  %-2d  --  %2d ", __dbgtmp, *it);
+		printf("  %2d  --  %2d ", __dbgtmp, *it);
 		for(uint i=0; i<*it; ++i) printf("|");
 		printf("\n");
 	}
@@ -99,21 +92,34 @@ int main() {
 
 
 void backtrack(uint depth) {
-	++__dbgbacktracks;
+	++__dbg_calls["backtrack"];
 	if(__dbgbacktracklvls.size() < depth) __dbgbacktracklvls.resize(depth);
 	++__dbgbacktracklvls[depth];
 	uint p=0;
-	for(p=0;(p<XY) && is_set(p); ++p) ;			// TODO: this is a very poor select
+	for(p=0;(p<XY) && is_set(brd[p]); ++p) ;			// TODO: this is a very poor select
 	if(p==XY) return;
-	char opts = get_chrots(p);
-	make_set(p);
+	char opts = get_chrots(brd[p]), pr = 4, conns, j, cnntd;
+	make_set(brd[p]);
 	for(char i=1; i<=8; i<<=1) {
 		if(! (i & opts) ) continue;
 		brd[p].rot = i;
+		conns = rotate_bin_wbin(type2conns[brd[p].type], i>>1);
+		for(j=1; j<=8; j<<=1) { // dla każdego połączenia wychodzącego
+			if(! (j & conns) )
+				continue;
+			cnntd = pos_goto(p, j);
+			if(cnntd < 0                                  // czy wewn. planszy
+					|| !is_set(brd[cnntd])                // czy ustalony
+					|| !does_connects(brd[cnntd], rotate_bin(j,2))) // czy łączy w tą stronę
+				continue;
+			printf("%*sŁączę %d <-> %d\n", 0, "", p, cnntd);
+			++__dbg_calls["node::unionW"];
+			brd[cnntd].unionW(brd[batt_pos], pr--);
+		}
 		__dbgprint("Backtrack", p, depth);
 		backtrack(depth+1);
 	}
-	make_unset(p);
+	make_unset(brd[p]);
 }
 
 
@@ -138,25 +144,28 @@ void read_board() {
 	char *inp;
 	while(fgets(input,INPUTLEN,stdin) != NULL) {
 		for(inp=input; *inp; inp+=3, ++board_pos) { // ustawianie .type .rot
-			if((*inp) == 'H' || ('D' <= (*inp) && (*inp) <= 'F')) // szukanie baterii
+			if((*inp) == 'H' || ('D' <= (*inp) && (*inp) <= 'F')) { // szukanie baterii
 				batt_pos = board_pos;
+				lbulbs.push_back(brd+board_pos);
+			} else if((*inp) == 'I')
+				lbulbs.push_back(brd+board_pos);
 			brd[board_pos].type = 'A' - (*inp) - 1;
 			switch(*inp) {
-				case 'A': case 'D': make_setr(board_pos,1<<0); break;
-				case 'B': case 'E': brd [board_pos].rot = 0x3; break;
+				case 'A': case 'D': make_set(brd[board_pos],1<<0); break;
+				case 'B': case 'E': brd[board_pos].rot = 0x3; break;
 				case 'I':	// Heureza H2.
 						  	// Wykonuje redukcje na styku żarówka-żarówka.
 									brd [board_pos].rot = 0xF;
 									if(inp > input && inp[-3]=='I') { // poziomo
-										rem_rotation(board_pos-1 ,0);
-										rem_rotation(board_pos   ,2);
+										rem_rotation(brd[board_pos-1] ,0);
+										rem_rotation(brd[board_pos]   ,2);
 									}
-									if(board_pos>X && get_chtype(board_pos-X)=='I') { // pionowo
-										rem_rotation(board_pos-X , 1);
-										rem_rotation(board_pos   , 3);
+									if(board_pos>X && get_chtype(brd[board_pos-X])=='I') { // pionowo
+										rem_rotation(brd[board_pos-X] , 1);
+										rem_rotation(brd[board_pos]   , 3);
 									}
 									break;
-				default:            brd [board_pos].rot = 0xF;
+				default:            brd[board_pos].rot = 0xF;
 			}
 		}
 	}
@@ -169,9 +178,9 @@ void print_board() {
 	uint x, y;
 	node *b = brd;
 	for(y=0;y<Y;++y) {
-		printf("%c", get_chtype(x,y));
+		printf("%c", get_chtype(board[y][x]));
 		for(x=1;x<X;++x,++b)
-			printf("%c%d ", get_chtype(x,y), (*b).rot  + 1);
+			printf("%c%d ", get_chtype(board[y][x]), (*b).rot  + 1);
 		printf("\n");
 	}
 }
@@ -184,9 +193,9 @@ void __dbgprint(const char *str, int elem, uint shift) {
 	for(y=0;y<Y;++y) {
 		printf("%*s", (shift<<1)+3, "|");
 		for(x=0;x<X;++x) {
-			printf("    %c%c",is_set(x,y)?'*':' ', get_chtype(x,y));
+			printf("    %c%c",is_set(board[y][x])?'*':' ', get_chtype(board[y][x]));
 			for(i=0;i<4;++i)
-				printf("%c", has_rotation(x,y,i)? (is_set(x,y)?get_chrot(x,y):'+'):(is_set(x,y)?' ':'_'));
+				printf("%c", has_rotation(board[y][x],i)? (is_set(board[y][x])?get_chrot(board[y][x]):'+'):(is_set(board[y][x])?' ':'_'));
 		}
 		printf("\n");
 	}
@@ -199,28 +208,44 @@ void h1() {
 	// rogi
 	for(y=0; y<Y; y+=Y-1)
 		for(x=0;x<X; x+=X-1, ++i)
-			switch(get_chtype(x,y)) {
-				case 'B':                               make_setr(x,y,1<<0);          break ; // martwy node
-				case 'C': case 'F': case 'G': case 'H': make_setr(x,y,1<<cornern[i]); break ;
-				case 'I':                               rem_rotation(x,y, (cornern[i]+3)&0x3); rem_rotation(x,y, (cornern[i]+2)&0x3); // &0x3 <=> %4
+			switch(get_chtype(board[y][x])) {
+				case 'B':           make_set(board[y][x],1<<0);			 break ; // martwy node
+				case 'C': case 'F':
+				case 'G': case 'H': make_set(board[y][x],1<<cornern[i]); break ;
+				case 'I':           rem_rotation(board[y][x], (cornern[i]+3)&0x3);
+									rem_rotation(board[y][x], (cornern[i]+2)&0x3);
 				default: ;
 			}
 	for(i=0,y=0;y<Y;y+=Y-1,++i) // boki góra/dół
 		for(x=X-2;x>0;--x)
-			switch(get_chtype(x,y)) {
-				case 'B':           make_setr(x,y,1);                                     break ;
-				case 'C': case 'F': rem_rotation(x,y,(i+2)&3); rem_rotation(x,y,(i+3)&3); break ;
-				case 'G': case 'H': make_setr(x,y,i<<1);                                  break ;
-				case 'I':           rem_rotation(x,y,1|(2>>i));
+			switch(get_chtype(board[y][x])) {
+				case 'B':           make_set(board[y][x],1);           break ;
+				case 'C': case 'F': rem_rotation(board[y][x],(i+2)&3);
+									rem_rotation(board[y][x],(i+3)&3); break ;
+				case 'G': case 'H': make_set(board[y][x],i<<1);        break ;
+				case 'I':           rem_rotation(board[y][x],1|(2>>i));
 				default:            ;
 			}
 	for(i=0,x=0;x<X;x+=X-1,++i) // boki lewo/prawo
 		for(y=Y-2;y>0;--y)
-			switch(get_chtype(x,y)) {
-				case 'B':           make_setr(x,y,2);                             break ;
-				case 'C': case 'F': rem_rotation(x,y,1^i); rem_rotation(x,y,2^i); break ;
-				case 'G': case 'H': make_setr(x,y,1<<(1|(2>>i)));                 break ;
-				case 'I':           rem_rotation(x,y,2-i<<1);
+			switch(get_chtype(board[y][x])) {
+				case 'B':           make_set(board[y][x],2);             break ;
+				case 'C': case 'F': rem_rotation(board[y][x],1^i);
+									rem_rotation(board[y][x],2^i);       break ;
+				case 'G': case 'H': make_set(board[y][x],1<<(1|(2>>i))); break ;
+				case 'I':           rem_rotation(board[y][x],2-(i<<1));
 				default:            ;
 			}
 }
+
+/** Zwraca ilość podłączonych żarówek. */
+inline uint bulbs_connected() {
+	++__dbg_calls["bulbs_connected"];
+	uint ret = 0;
+	node *SRC = brd[batt_pos].find();
+	for(vector<node*>::iterator it = lbulbs.begin(); it != lbulbs.end(); ++it)
+		if((*it)->find() == SRC)
+			++ret;
+	return ret;
+}
+
