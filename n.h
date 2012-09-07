@@ -55,15 +55,15 @@ inline char rotate_bin(char conn, const char rot) {
 inline char rotate_bin_wbin(const char conn, const char rot) {
 	++__dbg_calls["rotate_bin_wbin"];
 	const char ret[] = {0,1,2,2,3,3,3,3,4};
-	return rotate_bin(conn, ret[rot]);
+	return rotate_bin(conn, ret[(int)rot]);
 }
 
 /** Test: czy element @a p łączy w kierunku @d.
- * @pre Element jest ustawiony.
+ * @pre @verbatim is_set(p) @endverbatim
  * @param d Kierunek (binarnie). */
 inline bool does_connects(const node &n, const char d) {
 	++__dbg_calls["does_connects"];
-	return rotate_bin_wbin(type2conns[n.type], n.rot) & d;
+	return rotate_bin_wbin(type2conns[(int)n.type], n.rot) & d;
 }
 
 /** Ustaw znacznik 'ustalony'. */
@@ -116,7 +116,7 @@ inline char get_chrots(const node &p) {
 inline char get_chrot(const node &p) {
 	++__dbg_calls["get_chrot"];
 	char ret[] = {'0','1','2','2','3','3','3','3','4'};
-	return ret[p.rot];
+	return ret[(int)p.rot];
 	/*if(p.rot > 2) return p.rot==4?'3':'4';
 	else          return p.rot==2?'2':'1';*/
 }
@@ -126,7 +126,7 @@ inline char get_chrot(const node &p) {
 inline void rem_rotation(node &p, char r) {
 	++__dbg_calls["rem_rotation"];
 	p.rot &= (0xF - (1<<r));
-	if(rot2numrots[p.rot] <= 1)
+	if(rot2numrots[(int)p.rot] <= 1)
 		make_set(p);
 }
 

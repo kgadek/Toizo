@@ -43,7 +43,8 @@ int main() {
 	__dbgprint("Po H1");
 
 	// backtrack
-	char opts = get_chrots(brd[batt_pos]), pr = 4, conns, j, cnntd;
+	char opts = get_chrots(brd[batt_pos]), pr, conns, j;
+	int cnntd;
 	make_set(brd[batt_pos]);
 	__dbgbacktracklvls.push_back(0);
 	for(char i=1; i<=8; i<<=1) {
@@ -51,8 +52,9 @@ int main() {
 			continue;
 		++__dbgbacktracklvls[0];
 		brd[batt_pos].rot = i;
-		conns = rotate_bin_wbin(type2conns[brd[batt_pos].type], i>>1);
-		for(char j=1; j<=8; j<<=1) { // dla każdego połączenia wychodzącego
+		pr = 4;
+		conns = rotate_bin_wbin(type2conns[(int)brd[batt_pos].type], i>>1);
+		for(j=1; j<=8; j<<=1) { // dla każdego połączenia wychodzącego
 			if(! (j & conns) )
 				continue;
 			cnntd = pos_goto(batt_pos, j);
@@ -98,12 +100,14 @@ void backtrack(uint depth) {
 	uint p=0;
 	for(p=0;(p<XY) && is_set(brd[p]); ++p) ;			// TODO: this is a very poor select
 	if(p==XY) return;
-	char opts = get_chrots(brd[p]), pr = 4, conns, j, cnntd;
+	char opts = get_chrots(brd[p]), pr, conns, j;
+	int cnntd;
 	make_set(brd[p]);
 	for(char i=1; i<=8; i<<=1) {
 		if(! (i & opts) ) continue;
 		brd[p].rot = i;
-		conns = rotate_bin_wbin(type2conns[brd[p].type], i>>1);
+		pr = 4;
+		conns = rotate_bin_wbin(type2conns[(int)brd[p].type], i>>1);
 		for(j=1; j<=8; j<<=1) { // dla każdego połączenia wychodzącego
 			if(! (j & conns) )
 				continue;
@@ -118,6 +122,8 @@ void backtrack(uint depth) {
 		}
 		__dbgprint("Backtrack", p, depth);
 		backtrack(depth+1);
+		++__dbg_calls["node::backtrack"];
+		node::backtrack();
 	}
 	make_unset(brd[p]);
 }
