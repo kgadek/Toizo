@@ -47,29 +47,27 @@ int main() {
 	int cnntd;
 	make_set(brd[batt_pos]);
 	__dbgbacktracklvls.push_back(0);
-	for(char i=1; i<=8; i<<=1) {
-		if(! (i & opts) )
+	for(char i=1; i<=8; i<<=1) { // dla każdego możliwego obrotu:
+		if(! (i & opts) )        // jeśli dany obrót jest dopuszczalny
 			continue;
 		++__dbgbacktracklvls[0];
-		brd[batt_pos].rot = i;
-		pr = 4;
+		brd[batt_pos].rot = i;   // ustal obrót
+		pr = 5;
 		conns = rotate_bin_wbin(type2conns[(int)brd[batt_pos].type], i>>1);
-		for(j=1; j<=8; j<<=1) { // dla każdego połączenia wychodzącego
-			if(! (j & conns) )
-				continue;
-			cnntd = pos_goto(batt_pos, j);
-			if(cnntd < 0                                  // czy wewn. planszy
-					|| !is_set(brd[cnntd])                // czy ustalony
-					|| !does_connects(brd[cnntd], rotate_bin(j,2))) // czy łączy w tą stronę
-				continue;
-			printf("%*sŁączę %d <-> %d\n", 0, "", batt_pos, cnntd);
-			++__dbg_calls["node::unionW"];
-			brd[cnntd].unionW(brd[batt_pos], pr--);
+		for(j=1; j<=8; j<<=1) {                                      // dla każdego kierunku wychodzącego:
+			if(        (j&conns)                                     // jeśli dany element ma przewód w tym kierunku
+			    	&& (cnntd = pos_goto(batt_pos,j)) >= 0           // i na końcu przewodu znajduje się element
+			        && is_set(brd[cnntd])                            // który został już ustawiony
+			        && does_connects(brd[cnntd], rotate_bin(j,2))) { // i ma przewód do którego się można stąd podłączyć
+				++__dbg_calls["node::unionW"];
+				brd[cnntd].unionW(brd[batt_pos], --pr);              // połącz element bieżący w danym kierunku
+			}
 		}
 		__dbgprint("Backtrack: pozycja baterii", batt_pos, 0);
 		backtrack(1);
+
 		++__dbg_calls["node::backtrack"];
-		node::backtrack(); // cofnij połączenia union-find
+		node::backtrack();
 	}
 
 	printf("Call statistics:________________________________________\n");
@@ -95,33 +93,39 @@ int main() {
 
 void backtrack(uint depth) {
 	++__dbg_calls["backtrack"];
-	if(__dbgbacktracklvls.size() < depth) __dbgbacktracklvls.resize(depth);
+	if(__dbgbacktracklvls.size() < depth) __dbgbacktracklvls.push_back(0);
 	++__dbgbacktracklvls[depth];
-	uint p=0;
-	for(p=0;(p<XY) && is_set(brd[p]); ++p) ;			// TODO: this is a very poor select
-	if(p==XY) return;
-	char opts = get_chrots(brd[p]), pr, conns, j;
+
+	if(bulbs_connected() == lbulbs.size()) {
+		__dbgprint("Backtrack: znalezione rozwiązanie", 0, depth);
+	}
+	//TODO: jeśli znaleziono najlepsze, niekoniecznie optymalne
+	uint p=0;                                // SELECT
+	for(p=0;(p<XY) && is_set(brd[p]); ++p) ; // TODO: this is a very poor select indeed
+	if(p==XY) return;                        // EXIT CONDITION
+	char opts = get_chrots(brd[p]),
+		 pr,
+		 conns,
+		 j;
 	int cnntd;
 	make_set(brd[p]);
 	for(char i=1; i<=8; i<<=1) {
 		if(! (i & opts) ) continue;
 		brd[p].rot = i;
-		pr = 4;
+		pr = 5;
 		conns = rotate_bin_wbin(type2conns[(int)brd[p].type], i>>1);
-		for(j=1; j<=8; j<<=1) { // dla każdego połączenia wychodzącego
-			if(! (j & conns) )
-				continue;
-			cnntd = pos_goto(p, j);
-			if(cnntd < 0                                  // czy wewn. planszy
-					|| !is_set(brd[cnntd])                // czy ustalony
-					|| !does_connects(brd[cnntd], rotate_bin(j,2))) // czy łączy w tą stronę
-				continue;
-			printf("%*sŁączę %d <-> %d\n", 0, "", p, cnntd);
-			++__dbg_calls["node::unionW"];
-			brd[cnntd].unionW(brd[batt_pos], pr--);
+		for(j=1; j<=8; j<<=1) {                                      // dla każdego kierunku wychodzącego:
+			if(        (j&conns)                                     // jeśli dany element ma przewód w tym kierunku
+			    	&& (cnntd = pos_goto(p,j)) >= 0                  // i na końcu przewodu znajduje się element
+			        && is_set(brd[cnntd])                            // który został już ustawiony
+			        && does_connects(brd[cnntd], rotate_bin(j,2))) { // i ma przewód do którego się można stąd podłączyć
+				++__dbg_calls["node::unionW"];
+				brd[cnntd].unionW(brd[p], --pr);                     // połącz element bieżący w danym kierunku
+			}
 		}
 		__dbgprint("Backtrack", p, depth);
 		backtrack(depth+1);
+
 		++__dbg_calls["node::backtrack"];
 		node::backtrack();
 	}
@@ -131,7 +135,7 @@ void backtrack(uint depth) {
 
 /** Wczytujemy wierszami, maksymalnie 1500 znaków na raz (oraz dodatkowo znak końca łańcucha).
  * @warning Zakładamy, że na wejściu nie ma zbędnych białych znaków. */
-#define INPUTLEN 1501
+#define INPUTLEN 1502
 
 /** Wczytywanie planszy.
  * Alokuje reprezentację; ustawia zmienne ::X, ::Y i ::XY. Znajduje baterię (ustala ::batt_pos).
@@ -141,7 +145,7 @@ void read_board() {
 	scanf(" %d %d ", &X, &Y);
 	XY = X*Y;
 
-	// Podwójna notacja: board[x][y] <==> brd[i] dla i == X*y + x
+	// Podwójna notacja: board[x][y] <=> brd[i] dla i == X*y + x
 	board = new node*[Y];
 	brd = (*board) = new node[XY];
 	for(uint i=0;i<Y;++i) board[i] = *board + i*X;
@@ -150,18 +154,17 @@ void read_board() {
 	char *inp;
 	while(fgets(input,INPUTLEN,stdin) != NULL) {
 		for(inp=input; *inp; inp+=3, ++board_pos) { // ustawianie .type .rot
-			if((*inp) == 'H' || ('D' <= (*inp) && (*inp) <= 'F')) { // szukanie baterii
+			if((*inp) == 'H' || ('D' <= (*inp) && (*inp) <= 'F')) // szukanie baterii
 				batt_pos = board_pos;
-				lbulbs.push_back(brd+board_pos);
-			} else if((*inp) == 'I')
+			else if((*inp) == 'I')                                // szukanie żarówek
 				lbulbs.push_back(brd+board_pos);
 			brd[board_pos].type = 'A' - (*inp) - 1;
 			switch(*inp) {
 				case 'A': case 'D': make_set(brd[board_pos],1<<0); break;
 				case 'B': case 'E': brd[board_pos].rot = 0x3; break;
-				case 'I':	// Heureza H2.
-						  	// Wykonuje redukcje na styku żarówka-żarówka.
-									brd [board_pos].rot = 0xF;
+				case 'I':			// H2.
+						  			// Wykonuje redukcje na styku żarówka-żarówka.
+									brd[board_pos].rot = 0xF;
 									if(inp > input && inp[-3]=='I') { // poziomo
 										rem_rotation(brd[board_pos-1] ,0);
 										rem_rotation(brd[board_pos]   ,2);
@@ -178,13 +181,13 @@ void read_board() {
 }
 
 
-/** Wyświetlanie planszy. Nic ciekawego tu się nie dzieje. */
+/** Wyświetlanie planszy. Please disperse. There's nothing for you to see here. Keep moving. */
 void print_board() {
 	printf("%d %d\n", X,Y);
 	uint x, y;
 	node *b = brd;
 	for(y=0;y<Y;++y) {
-		printf("%c", get_chtype(board[y][x]));
+		printf("%c", get_chtype(board[y][0]));
 		for(x=1;x<X;++x,++b)
 			printf("%c%d ", get_chtype(board[y][x]), (*b).rot  + 1);
 		printf("\n");
@@ -195,13 +198,22 @@ void print_board() {
 /** Wyświetlanie planszy w trybie debug. */
 void __dbgprint(const char *str, int elem, uint shift) {
 	uint x,y,i;
+	node *SRC = brd[batt_pos].find();
 	printf("%*s[%2d]: %2d > %s\n", shift<<1, "", shift, elem, str);
 	for(y=0;y<Y;++y) {
+		if(y > 0) {
+			printf("%*s", (shift<<1)+3, "|");
+			for(x=0;x<X;++x)
+				printf("%-18s", (board[y][x].find() == board[y-1][x].find()) ? "     |" : "");
+			printf("\n");
+		}
 		printf("%*s", (shift<<1)+3, "|");
 		for(x=0;x<X;++x) {
-			printf("    %c%c",is_set(board[y][x])?'*':' ', get_chtype(board[y][x]));
+			printf ("   %c%c%c",board[y][x].find()==SRC?'*':' ', is_set(board[y][x])?'!':' ', get_chtype(board[y][x]));
 			for(i=0;i<4;++i)
 				printf("%c", has_rotation(board[y][x],i)? (is_set(board[y][x])?get_chrot(board[y][x]):'+'):(is_set(board[y][x])?' ':'_'));
+			if(x < X-1)
+				printf("   %5s", (board[y][x].find() == board[y][x+1].find()) ? "-----" : "");
 		}
 		printf("\n");
 	}
@@ -247,10 +259,11 @@ void h1() {
 /** Zwraca ilość podłączonych żarówek. */
 inline uint bulbs_connected() {
 	++__dbg_calls["bulbs_connected"];
+
 	uint ret = 0;
 	node *SRC = brd[batt_pos].find();
 	for(vector<node*>::iterator it = lbulbs.begin(); it != lbulbs.end(); ++it)
-		if((*it)->find() == SRC)
+		if((*it)->find() == SRC && is_set(**it))
 			++ret;
 	return ret;
 }
