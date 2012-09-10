@@ -132,4 +132,17 @@ inline void rem_rotation(node &p, char r) {
 		make_set(p);
 }
 
+/** Czy element połączony z sąsiadem.
+ * @param p Pozycja (1D).
+ * @param bdir Kierunek (binarnie).
+ * @return Pozycja sąsiada gdy połączony lub -1. */
+inline int connects_in_bdir(node* brd, uint p, uint bdir) {
+	int cnntd;
+	char conns = rotate_bin_wbin(type2conns[(int)brd[p].type], brd[p].rot>>1);
+	return ((bdir&conns)                                                // jeśli dany element ma przewód w tym kierunku
+		&& (cnntd = pos_goto(p,bdir)) >= 0                              // i na końcu przewodu znajduje się element
+		&& is_set(brd[cnntd])                                           // który został już ustawiony
+		&& does_connects(brd[cnntd], rotate_bin(bdir,2))) ? cnntd : -1; // i ma przewód do którego się można stąd podłączyć
+}
+
 #endif

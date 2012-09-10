@@ -50,37 +50,30 @@ int main() {
 	uint p;                                // element w poprawianiu poheurezowym
 	int cnntd;                             // sąsiad
 
-	for(p=0;p<XY;++p) {
+	for(p=0;p<XY;++p)
 		if(is_set(brd[p])) {
 			conns = rotate_bin_wbin(type2conns[(int)brd[p].type], brd[p].rot>>1);
-			for(j=1; j<=8; j<<=1) {                                      // dla każdego kierunku wychodzącego:
-				if(        (j&conns)                                     // jeśli dany element ma przewód w tym kierunku
-				    	&& (cnntd = pos_goto(p,j)) >= 0                  // i na końcu przewodu znajduje się element
-				        && is_set(brd[cnntd])                            // który został już ustawiony
-				        && does_connects(brd[cnntd], rotate_bin(j,2))) { // i ma przewód do którego się można stąd podłączyć
+			for(j=1; j<=8; j<<=1)                   // dla każdego kierunku wychodzącego:
+				if((cnntd = connects_in_bdir(brd, p,j)) >= 0) {
 					++__dbg_calls["node::unionW"];
-					brd[cnntd].unionW(brd[p], -100);                     // połącz element bieżący w danym kierunku
+					brd[cnntd].unionW(brd[p], -10); // połącz element bieżący w danym kierunku
 				}
-			}
 		}
-	}
 	__dbgprint("Po poprawianiu linków");
 
 	// backtrack
 	make_set(brd[batt_pos]);
 	__dbgbacktracklvls.push_back(0);
 	for(i=1; i<=8; i<<=1) { // dla każdego możliwego obrotu:
+		fprintf(stderr, "i=%d\n", i);
 		if(! (i & opts) )   // jeśli dany obrót jest dopuszczalny
 			continue;
 		++__dbgbacktracklvls[0];
-		brd[batt_pos].rot = i;   // ustal obrót
 		pr = 5;
+		brd[batt_pos].rot = i;   // ustal obrót
 		conns = rotate_bin_wbin(type2conns[(int)brd[batt_pos].type], i>>1);
 		for(j=1; j<=8; j<<=1) {                                      // dla każdego kierunku wychodzącego:
-			if(        (j&conns)                                     // jeśli dany element ma przewód w tym kierunku
-			    	&& (cnntd = pos_goto(batt_pos,j)) >= 0           // i na końcu przewodu znajduje się element
-			        && is_set(brd[cnntd])                            // który został już ustawiony
-			        && does_connects(brd[cnntd], rotate_bin(j,2))) { // i ma przewód do którego się można stąd podłączyć
+			if((cnntd = connects_in_bdir(brd, batt_pos,j)) >= 0) {
 				++__dbg_calls["node::unionW"];
 				brd[cnntd].unionW(brd[batt_pos], --pr);              // połącz element bieżący w danym kierunku
 			}
@@ -88,9 +81,12 @@ int main() {
 		__dbgprint("Backtrack: pozycja baterii", batt_pos, 0);
 		backtrack(1);
 
-		++__dbg_calls["node::backtrack"];
-		node::backtrack();
+		if(pr != 5) {
+			++__dbg_calls["node::backtrack"];
+			node::backtrack();
+		}
 	}
+	fprintf(stderr, "Lol");
 
 	printf("Call statistics:________________________________________\n");
 	uint __dbg_sumcalls = 0;
@@ -104,9 +100,10 @@ int main() {
 	}
 	printf("Backtrack statistics:___________________________________\n");
 	uint __dbgtmp = 0;
+	uint lll;
 	for(vector<uint>::iterator it = __dbgbacktracklvls.begin(); it!=__dbgbacktracklvls.end(); ++it, ++__dbgtmp) {
 		printf("  %2d  --  %2d ", __dbgtmp, *it);
-		for(i=0; i<*it; ++i) printf("|");
+		for(lll=0; lll<(*it); ++lll) printf("|");
 		printf("\n");
 	}
 	return 0;
@@ -119,6 +116,7 @@ void backtrack(uint depth) {
 	++__dbgbacktracklvls[depth];
 
 	if(bulbs_connected() == lbulbs.size()) {
+		fprintf(stderr, "Nailed it.\n");
 		__dbgprint("Backtrack: znalezione rozwiązanie", 0, depth);
 	}
 	//TODO: jeśli znaleziono najlepsze, niekoniecznie optymalne
@@ -138,10 +136,7 @@ void backtrack(uint depth) {
 		pr = 5;
 		conns = rotate_bin_wbin(type2conns[(int)brd[p].type], i>>1);
 		for(j=1; j<=8; j<<=1) {                                      // dla każdego kierunku wychodzącego:
-			if(        (j&conns)                                     // jeśli dany element ma przewód w tym kierunku
-			    	&& (cnntd = pos_goto(p,j)) >= 0                  // i na końcu przewodu znajduje się element
-			        && is_set(brd[cnntd])                            // który został już ustawiony
-			        && does_connects(brd[cnntd], rotate_bin(j,2))) { // i ma przewód do którego się można stąd podłączyć
+			if((cnntd = connects_in_bdir(brd, p,j)) >= 0) {
 				++__dbg_calls["node::unionW"];
 				brd[cnntd].unionW(brd[p], --pr);                     // połącz element bieżący w danym kierunku
 			}
@@ -149,8 +144,10 @@ void backtrack(uint depth) {
 		__dbgprint("Backtrack", p, depth);
 		backtrack(depth+1);
 
-		++__dbg_calls["node::backtrack"];
-		node::backtrack();
+		if(pr != 5) {
+			++__dbg_calls["node::backtrack"];
+			node::backtrack();
+		}
 	}
 	make_unset(brd[p]);
 	brd[p].rot = prerot;
@@ -233,7 +230,7 @@ void __dbgprint(const char *str, int elem, uint shift) {
 		}
 		printf("%*s", (shift<<1)+3, "|");
 		for(x=0;x<X;++x) {
-			printf ("   %c%c%c",board[y][x].find()==SRC?'*':' ', is_set(board[y][x])?'!':' ', get_chtype(board[y][x]));
+			printf ("   %c%c%c[;%dm%c%c[;%dm",board[y][x].find()==SRC?'*':' ', is_set(board[y][x])?'!':' ', 0x1B, y*X+x==elem?31:0, get_chtype(board[y][x]), 0x1B, 0);
 			for(i=0;i<4;++i)
 				printf("%c", has_rotation(board[y][x],i)? (is_set(board[y][x])?get_chrot(board[y][x]):'+'):(is_set(board[y][x])?' ':'_'));
 			if(x < X-1)
