@@ -17,13 +17,15 @@ struct node : public set<node> {
 };
 
 /** Ilość obrotów do rozważenia dla kolejnych typów klocków. */
-char rots[] = {1,2,4,1,2,4,4,4,4};
+char rots[] = { 1,  2,  4,  1,  2,  4,  4,  4, 4};
+			//  A   B   C   D   E   F   G   H  I
 
 /** Konwersja dopuszczalnych obrotów binarnie na ich ilość. */
 char rot2numrots[] = {0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4};
 
 /** Konwersja typu na połączenia wychodzące. */
-char type2conns[] = {0x0, 0xF, 0xA, 0x6, 0xF, 0xA, 0x6, 0xE, 0xE, 0x2};
+char type2conns[] = {000, 0xF, 0x5, 0x3, 0xF, 0x5, 0x3, 0x7, 0x7, 0x1, };
+						// A    B    C    D    E    F    G    H    I
 
 
 /** Pozycja po ruchu w kierunku @a d.
@@ -33,10 +35,10 @@ char type2conns[] = {0x0, 0xF, 0xA, 0x6, 0xF, 0xA, 0x6, 0xE, 0xE, 0x2};
 inline int pos_goto(uint p, const char d) {
 	++__dbg_calls["pos_goto"];
 	switch(d) {
-		case 1 : if(p<X)      return -1; return p-X;
-		case 2 : if(!(p+1%X)) return -1; return p+1;
-		case 4 : if(p>=XY-X)  return -1; return p+X;
-		default: if(!(p%X))   return -1; return p-1;
+		case 1 : if(!(p+1%X)) return -1; return p+1;
+		case 2 : if(p>=XY-X)  return -1; return p+X;
+		case 4 : if(!(p%X))   return -1; return p-1;
+		default: if(p<X)      return -1; return p-X;
 	}
 }
 
@@ -46,7 +48,7 @@ inline int pos_goto(uint p, const char d) {
 inline char rotate_bin(char conn, const char rot) {
 	++__dbg_calls["rotate_bin"];
 	char l = (conn<<=rot) & 0xF;
-	return l | ((conn ^ l) >> 4);
+	return l | (conn>>4);
 }
 
 /** Obraca rzeczy w zapisie binarnym.
@@ -63,7 +65,7 @@ inline char rotate_bin_wbin(const char conn, const char rot) {
  * @param d Kierunek (binarnie). */
 inline bool does_connects(const node &n, const char d) {
 	++__dbg_calls["does_connects"];
-	return rotate_bin_wbin(type2conns[(int)n.type], n.rot) & d;
+	return rotate_bin_wbin(type2conns[(int)n.type], n.rot>>1) & d;
 }
 
 /** Ustaw znacznik 'ustalony'. */

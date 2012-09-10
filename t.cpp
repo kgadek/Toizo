@@ -42,13 +42,35 @@ int main() {
 	h1();
 	__dbgprint("Po H1");
 
+	char opts = get_chrots(brd[batt_pos]), // możliwości obrotu
+		 pr,                               // priorytet operacji unionW
+		 conns,                            // dopuszczalne kierunki wychodzące
+		 j,                                // kierunek wychodzący
+		 i;                                // dany obrót
+	uint p;                                // element w poprawianiu poheurezowym
+	int cnntd;                             // sąsiad
+
+	for(p=0;p<XY;++p) {
+		if(is_set(brd[p])) {
+			conns = rotate_bin_wbin(type2conns[(int)brd[p].type], brd[p].rot>>1);
+			for(j=1; j<=8; j<<=1) {                                      // dla każdego kierunku wychodzącego:
+				if(        (j&conns)                                     // jeśli dany element ma przewód w tym kierunku
+				    	&& (cnntd = pos_goto(p,j)) >= 0                  // i na końcu przewodu znajduje się element
+				        && is_set(brd[cnntd])                            // który został już ustawiony
+				        && does_connects(brd[cnntd], rotate_bin(j,2))) { // i ma przewód do którego się można stąd podłączyć
+					++__dbg_calls["node::unionW"];
+					brd[cnntd].unionW(brd[p], -100);                     // połącz element bieżący w danym kierunku
+				}
+			}
+		}
+	}
+	__dbgprint("Po poprawianiu linków");
+
 	// backtrack
-	char opts = get_chrots(brd[batt_pos]), pr, conns, j;
-	int cnntd;
 	make_set(brd[batt_pos]);
 	__dbgbacktracklvls.push_back(0);
-	for(char i=1; i<=8; i<<=1) { // dla każdego możliwego obrotu:
-		if(! (i & opts) )        // jeśli dany obrót jest dopuszczalny
+	for(i=1; i<=8; i<<=1) { // dla każdego możliwego obrotu:
+		if(! (i & opts) )   // jeśli dany obrót jest dopuszczalny
 			continue;
 		++__dbgbacktracklvls[0];
 		brd[batt_pos].rot = i;   // ustal obrót
@@ -84,7 +106,7 @@ int main() {
 	uint __dbgtmp = 0;
 	for(vector<uint>::iterator it = __dbgbacktracklvls.begin(); it!=__dbgbacktracklvls.end(); ++it, ++__dbgtmp) {
 		printf("  %2d  --  %2d ", __dbgtmp, *it);
-		for(uint i=0; i<*it; ++i) printf("|");
+		for(i=0; i<*it; ++i) printf("|");
 		printf("\n");
 	}
 	return 0;
@@ -106,7 +128,8 @@ void backtrack(uint depth) {
 	char opts = get_chrots(brd[p]),
 		 pr,
 		 conns,
-		 j;
+		 j,
+		 prerot = brd[p].rot;
 	int cnntd;
 	make_set(brd[p]);
 	for(char i=1; i<=8; i<<=1) {
@@ -130,6 +153,7 @@ void backtrack(uint depth) {
 		node::backtrack();
 	}
 	make_unset(brd[p]);
+	brd[p].rot = prerot;
 }
 
 
@@ -199,7 +223,7 @@ void print_board() {
 void __dbgprint(const char *str, int elem, uint shift) {
 	uint x,y,i;
 	node *SRC = brd[batt_pos].find();
-	printf("%*s[%2d]: %2d > %s\n", shift<<1, "", shift, elem, str);
+	printf("%*s[%2d]: %2d=%2d:%-2d w/ %2d bulbs > %s\n", shift<<1, "", shift, elem, elem%X, elem/X, bulbs_connected(), str);
 	for(y=0;y<Y;++y) {
 		if(y > 0) {
 			printf("%*s", (shift<<1)+3, "|");
