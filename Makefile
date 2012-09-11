@@ -6,22 +6,17 @@ CXXFLAGS    =   -O0 -g -ggdb3 -pg\
 		        -pedantic -Weffc++
 LDFLAGS     =   -lm
 
-.PHONY: clean doc all tagfile
+.PHONY: clean doc all ctags
 
 all: t doc
-#	./tests/tester.sh ./t
 
-t: t.cpp Unionfind-cpp/set.h n.h tagfile
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(<:%.cpp=%.cpp) -o $@
-
-tagfile:
-	ctags -R --exclude=.git --exclude=doc --exclude=docs
+ctags:
+	ctags -R --exclude=.git --exclude=doc --exclude=docs --exclude=quickcheck
 
 clean:
-	rm -f t tags
+	rm -f t tags gmon.txt gmon.out
 	rm -rf doc
 
-doc: t.cpp Unionfind-cpp/set.h
+doc: t.cpp
 	doxygen
 
-t: tagfile
