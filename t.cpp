@@ -230,7 +230,7 @@ void __dbgprint(const char *str, int elem, uint shift) {
 		}
 		printf("%*s", (shift<<1)+3, "|");
 		for(x=0;x<X;++x) {
-			printf ("   %c%c%c[;%dm%c%c[;%dm",board[y][x].find()==SRC?'*':' ', is_set(board[y][x])?'!':' ', 0x1B, y*X+x==elem?31:0, get_chtype(board[y][x]), 0x1B, 0);
+			printf ("   %c%c%c[;%dm%c%c[;%dm",board[y][x].find()==SRC?'*':' ', is_set(board[y][x])?'!':' ', 0x1B, y*X+x==(uint)(elem?31:0), get_chtype(board[y][x]), 0x1B, 0);
 			for(i=0;i<4;++i)
 				printf("%c", has_rotation(board[y][x],i)? (is_set(board[y][x])?get_chrot(board[y][x]):'+'):(is_set(board[y][x])?' ':'_'));
 			if(x < X-1)

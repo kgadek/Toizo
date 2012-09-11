@@ -2,11 +2,10 @@
 TAGS
 tags
 *.pdf
-c
 *.jpg
 docs
-t
 doc
-u
 gmon.out
 gmon.txt
+[a-z]
+out
