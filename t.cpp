@@ -13,7 +13,6 @@ typedef unsigned int uint;
 typedef unsigned char uchar;
 
 
-
 uint X,               /**< Ilość kolumn. */
 	 Y,               /**< Ilość wierszy. */
 	 XY;              /**< Taki mały helper; xy = x*y. */
@@ -21,6 +20,8 @@ uint batt_pos;        /**< Pozycja baterii. */
 node **board;         /**< Reprezentacja planszy. */
 node *brd;            /**< brd = (*board). */
 vector<node*> lbulbs; /**< Zbiór wszystkich żarówek. */
+uint best_so_far;	  /**< Najlepsze znalezione rozwiązanie - ilość żarówek. */
+char* snapshot_best;  /**< Najelpsze znalezione rozwiązanie - zapis. */
 
 map<const char*, uint, eqstr> __dbg_calls;
 vector<uint> __dbgbacktracklvls;
@@ -32,6 +33,7 @@ void read_board();
 void print_board();
 void h1();
 void backtrack(uint);
+void savesnapshot();
 
 
 
@@ -65,7 +67,6 @@ int main() {
 	make_set(brd[batt_pos]);
 	__dbgbacktracklvls.push_back(0);
 	for(i=1; i<=8; i<<=1) { // dla każdego możliwego obrotu:
-		fprintf(stderr, "i=%d\n", i);
 		if(! (i & opts) )   // jeśli dany obrót jest dopuszczalny
 			continue;
 		++__dbgbacktracklvls[0];
@@ -86,7 +87,6 @@ int main() {
 			node::backtrack();
 		}
 	}
-	fprintf(stderr, "Lol");
 
 	printf("Call statistics:________________________________________\n");
 	uint __dbg_sumcalls = 0;
@@ -115,11 +115,14 @@ void backtrack(uint depth) {
 	if(__dbgbacktracklvls.size() < depth) __dbgbacktracklvls.push_back(0);
 	++__dbgbacktracklvls[depth];
 
-	if(bulbs_connected() == lbulbs.size()) {
-		fprintf(stderr, "Nailed it.\n");
-		__dbgprint("Backtrack: znalezione rozwiązanie", 0, depth);
+	uint blbs = bulbs_connected();
+	if(blbs == lbulbs.size()) {
+		print_board();
+		exit(0);
+	} else if(blbs > best_so_far) {
+		best_so_far = blbs;
+		savesnapshot();
 	}
-	//TODO: jeśli znaleziono najlepsze, niekoniecznie optymalne
 	uint p=0;                                // SELECT
 	for(p=0;(p<XY) && is_set(brd[p]); ++p) ; // TODO: this is a very poor select indeed
 	if(p==XY) return;                        // EXIT CONDITION
@@ -166,6 +169,7 @@ void read_board() {
 	scanf(" %d %d ", &X, &Y);
 	XY = X*Y;
 
+	snapshot_best = new char[XY];
 	// Podwójna notacja: board[x][y] <=> brd[i] dla i == X*y + x
 	board = new node*[Y];
 	brd = (*board) = new node[XY];
@@ -208,9 +212,9 @@ void print_board() {
 	uint x, y;
 	node *b = brd;
 	for(y=0;y<Y;++y) {
-		printf("%c", get_chtype(board[y][0]));
+		printf("%c%c", get_chtype(board[y][0]), get_chrot(board[y][0]));
 		for(x=1;x<X;++x,++b)
-			printf("%c%d ", get_chtype(board[y][x]), (*b).rot  + 1);
+			printf(" %c%c", get_chtype(board[y][x]), get_chrot(board[y][x]));
 		printf("\n");
 	}
 }
@@ -218,7 +222,7 @@ void print_board() {
 
 /** Wyświetlanie planszy w trybie debug. */
 void __dbgprint(const char *str, int elem, uint shift) {
-	uint x,y,i;
+	/*uint x,y,i;
 	node *SRC = brd[batt_pos].find();
 	printf("%*s[%2d]: %2d=%2d:%-2d w/ %2d bulbs > %s\n", shift<<1, "", shift, elem, elem%X, elem/X, bulbs_connected(), str);
 	for(y=0;y<Y;++y) {
@@ -237,7 +241,7 @@ void __dbgprint(const char *str, int elem, uint shift) {
 				printf("   %5s", (board[y][x].find() == board[y][x+1].find()) ? "-----" : "");
 		}
 		printf("\n");
-	}
+	}*/
 }
 
 /** Heureza H1. Ustala sytuacje na krawędziach. */
@@ -289,3 +293,7 @@ inline uint bulbs_connected() {
 	return ret;
 }
 
+void savesnapshot() {
+	for(uint i=0;i<XY;++i)
+		snapshot_best[i] = brd[i].rot;
+}
