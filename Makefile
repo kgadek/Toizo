@@ -6,12 +6,12 @@ CXXFLAGS    =   -O0 -g -ggdb3 -pg\
 		        -pedantic -Weffc++
 LDFLAGS     =   -lm
 
-.PHONY: clean doc all ctags
+.PHONY: clean doc all
 
 all: t doc
 
-ctags:
-	ctags -R --exclude=.git --exclude=doc --exclude=docs --exclude=quickcheck
+tags: t.cpp
+	ctags -R --exclude=.git --exclude=doc --exclude=docs
 
 clean:
 	rm -f t tags gmon.txt gmon.out
