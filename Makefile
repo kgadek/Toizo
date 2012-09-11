@@ -1,4 +1,4 @@
-CXX         =   clang++
+CXX         =   g++
 CXXFLAGS    =   -O0 -g -ggdb3 -pg\
                 -W -Wall -Wshadow -Wformat\
                 -Wsequence-point -Wunused -Wchar-subscripts\

@@ -5,17 +5,250 @@
 #include <cstring>
 #include <vector>
 #include <map>
-#include "n.h"
+#include <utility>
 
 using namespace std;
+
+uint X,               /**< Ilość kolumn. */
+	 Y,               /**< Ilość wierszy. */
+	 XY;              /**< Taki mały helper; xy = x*y. */
+
+//********************************************************************************
+//********************************************************************************
+//********************************************************************************
+typedef unsigned int uint;
+typedef std::pair<uint,uint> stampedUnion; /**< Struktura wskazująca na operację union: id na stosie  x  stamp. */
+typedef std::pair<int,uint> unionDescr; /**< Struktura opisująca operację union na stosie:  priorytet  x  stamp. */
+typedef std::pair<stampedUnion,uint> stampedRank; /**< Struktura: wskazanie na union  x  wysokość drzewa następująca po wskazanej danej operacji union. */
+
+/** Mixin: union-set z operacją set::backtrack().
+ * Koszt pamięciowy: \f$4+20*U+16*N\f$ bajtów dla N node-ów i U operacji union. */
+template <class T>
+class set {
+	T* p; /**< Link na node nadrzędny. */
+	stampedUnion pU; /**< Wskazanie na opis operacji. Pozwala stwierdzić, czy link jest żywy. */
+	std::vector<stampedRank> rL; /**< Lista ranków. Jest listą par (r,u) gdzie r to rank zaraz po wykonaniu union u. */
+
+	static std::vector<unionDescr> uH; /**< Stos operacji union. */
+	static uint uStmp; /**< Stamp do oznaczania operacji union. */
+
+	/** Stwierdza, czy link wychodzący jest żywy, jeśli nie to go usuwa. @pre @verbatim set::p != NULL @endverbatim */
+	bool isLinkAlive() {
+		return ( pU.first < (uint)T::uH.size() && T::uH[pU.first].second == pU.second ) // jeśli link żywy to zwróci true
+			|| (p = NULL); // jeśli nie to zwróci NULL == false
+	}
+
+	/** Zwraca rank. Jeśli może to skraca set::rL. Czas: \f$ O(\log \log n)\f$. */
+	uint getRank() {
+		int l = -1, u = rL.size(), i;
+		for(i = (l+u)>>1; l+1<u; i=(l+u)>>1)
+			if( T::uH[rL[i].first.first].second == rL[i].first.second )
+				l = i;
+			else u = i;
+		rL.resize(l+1);
+		return l==-1 ? 1 : rL.back().second;
+	}
+
+	/** Swap. */
+	template <class X> void swap(X &a, X &b) {
+		X t = a;
+		a = b;
+		b = t;
+	}
+	set& operator=(const set<T>&); /**< Za Eff-C++ I11, I27: blokada autogeneracji kodu. */
+	template <class R> set(const set<R>&) /**< Za Eff-C++ I11, I27: blokada autogeneracji kodu. */;
+public:
+	/** Konstruktor, który niewiele robi. */
+	set() : p(NULL),pU(),rL() {}
+
+	/** Wyszukiwanie reprezentanta zbioru. Przy okazji - implicite poprzez set::isLinkAlive() - usuwa martwe linki. Czas: \f$O(\log n)\f$. */
+	T* find() {
+		T* n = static_cast<T*>(this);
+		while(n->p != NULL && n->isLinkAlive())
+			n = n->p;
+		return n;
+	}
+
+	/** Operacja union. Czas: \f$O(\log n)\f$. */
+	void unionW(T& oo /**< Łącze między bieżącym a wskazanym nodem. */,
+			const int prio /**< Priorytet łącza. */) {
+		T *pp = find(), // restoring phase
+			*qq = oo.find();
+		uint ppr = pp->getRank(),
+			 qqr = qq->getRank();
+		if(ppr > qqr) {
+			swap(ppr,qqr);
+			swap(pp,qq);
+		}
+		if(T::uH.empty() || prio >= T::uH.back().first) // linking phase
+			T::uH.push_back(unionDescr(prio, T::uStmp++));
+		if(pp == qq) return;
+		pp->p = qq;
+		pp->pU = stampedUnion(T::uH.size()-1, T::uH.back().second);
+		if(!qq->rL.empty() && qq->rL.back().first == pp->pU) // rank updating phase
+			qq->rL.back().second = std::max(ppr+1,qqr);
+		else
+			qq->rL.push_back(stampedRank(pp->pU, std::max(ppr+1,qqr)));
+	}
+
+	/** Cofanie. Anuluje tyle cofnięć, by ostatni union o najwyższym priorytecie przestał obowiązywać. */
+	static void backtrack() {
+		if(!T::uH.empty())
+			T::uH.pop_back();
+	}
+
+};
+
+template <class T>
+std::vector<unionDescr> set<T>::uH = std::vector<unionDescr>();
+
+template <class T>
+uint set<T>::uStmp = 0;
+//********************************************************************************
+//********************************************************************************
+//********************************************************************************
+struct node : public set<node> {
+	char type; /**< Typ obiektu. Ustalona pozycja gddy wartość dodatnia. */
+	char rot;  /**< Dopuszczalne obroty obiektu. */
+	node() : type(0), rot(0) {}
+};
+
+/** Ilość obrotów do rozważenia dla kolejnych typów klocków. */
+char rots[] = { 1,  2,  4,  1,  2,  4,  4,  4, 4};
+			//  A   B   C   D   E   F   G   H  I
+
+/** Konwersja dopuszczalnych obrotów binarnie na ich ilość. */
+char rot2numrots[] = {0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4};
+
+/** Konwersja typu na połączenia wychodzące. */
+char type2conns[] = {000, 0xF, 0x5, 0x3, 0xF, 0x5, 0x3, 0x7, 0x7, 0x1, };
+						// A    B    C    D    E    F    G    H    I
+
+
+/** Pozycja po ruchu w kierunku @a d.
+ * @param p Pozycja (1D).
+ * @param d Kierunek binarnie (1,2,4,8).
+ * @return Pozycja lub -1 gdy poza planszą. */
+inline int pos_goto(uint p, const char d) {
+	//++__dbg_calls["pos_goto"];
+	switch(d) {
+		case 1 : if(!(p+1%X)) return -1; return p+1;
+		case 2 : if(p>=XY-X)  return -1; return p+X;
+		case 4 : if(!(p%X))   return -1; return p-1;
+		default: if(p<X)      return -1; return p-X;
+	}
+}
+
+/** Obraca rzeczy w zapisie binarnym.
+ * @param conn Do obrotu, z zakresu 0-15.
+ * @param rot Obrót (naturalnie). */
+inline char rotate_bin(char conn, const char rot) {
+	//++__dbg_calls["rotate_bin"];
+	char l = (conn<<=rot) & 0xF;
+	return l | (conn>>4);
+}
+
+/** Obraca rzeczy w zapisie binarnym.
+ * @param conn Do obrotu, z zakresu 0-15.
+ * @param rot Obrót (binarnie). */
+inline char rotate_bin_wbin(const char conn, const char rot) {
+	//++__dbg_calls["rotate_bin_wbin"];
+	const char ret[] = {0,1,2,2,3,3,3,3,4};
+	return rotate_bin(conn, ret[(int)rot]);
+}
+
+/** Test: czy element @a p łączy w kierunku @d.
+ * @pre @verbatim is_set(p) @endverbatim
+ * @param d Kierunek (binarnie). */
+inline bool does_connects(const node &n, const char d) {
+	//++__dbg_calls["does_connects"];
+	return rotate_bin_wbin(type2conns[(int)n.type], n.rot>>1) & d;
+}
+
+/** Ustaw znacznik 'ustalony'. */
+inline void make_set(node &p) {
+	//++__dbg_calls["make_set/1"];
+	p.type = abs(p.type);
+}
+
+/** Ustaw pozycję.
+ * @param r Obrót (binarnie). */
+inline void make_set(node &p, const char r) {
+	//++__dbg_calls["make_set/2"];
+	make_set(p);
+	p.rot  = r;
+}
+
+/** Usuń znacznik 'ustalony'. */
+inline void make_unset(node &p) {
+	//++__dbg_calls["make_unset"];
+	p.type = -abs(p.type);
+}
+
+/** Czy ma znacznik 'ustalony'? */
+inline bool is_set(const node &p) {
+	//++__dbg_calls["is_set"];
+	return p.type > 0;
+}
+
+/** Test: czy obrót @a r jest dopuszczalny?
+ * @param r Obrót (naturalnie). */
+inline bool has_rotation(const node &p, const char r) {
+	//++__dbg_calls["has_rotation"];
+	return p.rot & (1<<r);
+}
+
+/** Zwraca typ. */
+inline char get_chtype(const node &p) {
+	//++__dbg_calls["get_chtype"];
+	return abs(p.type) + 'A'-1;
+}
+
+/** Zwraca dostępne rotacje. */
+inline char get_chrots(const node &p) {
+	//++__dbg_calls["get_chrots"];
+	return p.rot;
+}
+
+/** Zwraca rotację.
+ * @pre @verbatim is_set(p) @endverbatim */
+inline char get_chrot(const node &p) {
+	//++__dbg_calls["get_chrot"];
+	char ret[] = {'0','1','2','2','3','3','3','3','4'};
+	return ret[(int)p.rot];
+	/*if(p.rot > 2) return p.rot==4?'3':'4';
+	else          return p.rot==2?'2':'1';*/
+}
+
+/** Usuwa jedną z możliwości rotacji.
+ * @param r Rotacja (naturalnie). */
+inline void rem_rotation(node &p, char r) {
+	//++__dbg_calls["rem_rotation"];
+	p.rot &= (0xF - (1<<r));
+	if(rot2numrots[(int)p.rot] <= 1)
+		make_set(p);
+}
+
+/** Czy element połączony z sąsiadem.
+ * @param p Pozycja (1D).
+ * @param bdir Kierunek (binarnie).
+ * @return Pozycja sąsiada gdy połączony lub -1. */
+inline int connects_in_bdir(node* brd, uint p, uint bdir) {
+	int cnntd;
+	char conns = rotate_bin_wbin(type2conns[(int)brd[p].type], brd[p].rot>>1);
+	return ((bdir&conns)                                                // jeśli dany element ma przewód w tym kierunku
+		&& (cnntd = pos_goto(p,bdir)) >= 0                              // i na końcu przewodu znajduje się element
+		&& is_set(brd[cnntd])                                           // który został już ustawiony
+		&& does_connects(brd[cnntd], rotate_bin(bdir,2))) ? cnntd : -1; // i ma przewód do którego się można stąd podłączyć
+}
+//********************************************************************************
+//********************************************************************************
+//********************************************************************************
 
 typedef unsigned int uint;
 typedef unsigned char uchar;
 
 
-uint X,               /**< Ilość kolumn. */
-	 Y,               /**< Ilość wierszy. */
-	 XY;              /**< Taki mały helper; xy = x*y. */
 uint batt_pos;        /**< Pozycja baterii. */
 node **board;         /**< Reprezentacja planszy. */
 node *brd;            /**< brd = (*board). */
@@ -23,10 +256,10 @@ vector<node*> lbulbs; /**< Zbiór wszystkich żarówek. */
 uint best_so_far;	  /**< Najlepsze znalezione rozwiązanie - ilość żarówek. */
 char* snapshot_best;  /**< Najelpsze znalezione rozwiązanie - zapis. */
 
-map<const char*, uint, eqstr> __dbg_calls;
+/*map<const char*, uint, eqstr> __dbg_calls;
 vector<uint> __dbgbacktracklvls;
 
-void __dbgprint(const char*, int elem = -1, uint shift = 0);
+void //__dbgprint(const char*, int elem = -1, uint shift = 0);*/
 
 inline uint bulbs_connected();
 void read_board();
@@ -34,19 +267,19 @@ void print_board();
 void h1();
 void backtrack(uint);
 void savesnapshot();
-
+void restoresnapshot();
 
 
 /** Główna metoda. */
 int main() {
 	read_board();
-	__dbgprint("Po wczytaniu i H2");
+	//__dbgprint("Po wczytaniu i H2");
 	h1();
-	__dbgprint("Po H1");
+	//__dbgprint("Po H1");
 
 	char opts = get_chrots(brd[batt_pos]), // możliwości obrotu
 		 pr,                               // priorytet operacji unionW
-		 conns,                            // dopuszczalne kierunki wychodzące
+		 //conns,                            // dopuszczalne kierunki wychodzące
 		 j,                                // kierunek wychodzący
 		 i;                                // dany obrót
 	uint p;                                // element w poprawianiu poheurezowym
@@ -54,40 +287,44 @@ int main() {
 
 	for(p=0;p<XY;++p)
 		if(is_set(brd[p])) {
-			conns = rotate_bin_wbin(type2conns[(int)brd[p].type], brd[p].rot>>1);
+			//conns = rotate_bin_wbin(type2conns[(int)brd[p].type], brd[p].rot>>1);
 			for(j=1; j<=8; j<<=1)                   // dla każdego kierunku wychodzącego:
 				if((cnntd = connects_in_bdir(brd, p,j)) >= 0) {
-					++__dbg_calls["node::unionW"];
+					//++__dbg_calls["node::unionW"];
 					brd[cnntd].unionW(brd[p], -10); // połącz element bieżący w danym kierunku
 				}
 		}
-	__dbgprint("Po poprawianiu linków");
+	//__dbgprint("Po poprawianiu linków");
 
 	// backtrack
 	make_set(brd[batt_pos]);
-	__dbgbacktracklvls.push_back(0);
+	//__dbgbacktracklvls.push_back(0);
 	for(i=1; i<=8; i<<=1) { // dla każdego możliwego obrotu:
 		if(! (i & opts) )   // jeśli dany obrót jest dopuszczalny
 			continue;
-		++__dbgbacktracklvls[0];
+		//++__dbgbacktracklvls[0];
 		pr = 5;
 		brd[batt_pos].rot = i;   // ustal obrót
-		conns = rotate_bin_wbin(type2conns[(int)brd[batt_pos].type], i>>1);
+		//conns = rotate_bin_wbin(type2conns[(int)brd[batt_pos].type], i>>1);
 		for(j=1; j<=8; j<<=1) {                                      // dla każdego kierunku wychodzącego:
 			if((cnntd = connects_in_bdir(brd, batt_pos,j)) >= 0) {
-				++__dbg_calls["node::unionW"];
+				//++__dbg_calls["node::unionW"];
 				brd[cnntd].unionW(brd[batt_pos], --pr);              // połącz element bieżący w danym kierunku
 			}
 		}
-		__dbgprint("Backtrack: pozycja baterii", batt_pos, 0);
+		//__dbgprint("Backtrack: pozycja baterii", batt_pos, 0);
 		backtrack(1);
 
 		if(pr != 5) {
-			++__dbg_calls["node::backtrack"];
+			//++__dbg_calls["node::backtrack"];
 			node::backtrack();
 		}
 	}
 
+	restoresnapshot();
+	print_board();
+
+	/*
 	printf("Call statistics:________________________________________\n");
 	uint __dbg_sumcalls = 0;
 	for(map<const char*, uint, eqstr>::iterator it = __dbg_calls.begin(); it != __dbg_calls.end(); ++it)
@@ -105,15 +342,15 @@ int main() {
 		printf("  %2d  --  %2d ", __dbgtmp, *it);
 		for(lll=0; lll<(*it); ++lll) printf("|");
 		printf("\n");
-	}
+	}*/
 	return 0;
 }
 
 
 void backtrack(uint depth) {
-	++__dbg_calls["backtrack"];
-	if(__dbgbacktracklvls.size() < depth) __dbgbacktracklvls.push_back(0);
-	++__dbgbacktracklvls[depth];
+	//++__dbg_calls["backtrack"];
+	//if(__dbgbacktracklvls.size() < depth) __dbgbacktracklvls.push_back(0);
+	//++__dbgbacktracklvls[depth];
 
 	uint blbs = bulbs_connected();
 	if(blbs == lbulbs.size()) {
@@ -128,7 +365,7 @@ void backtrack(uint depth) {
 	if(p==XY) return;                        // EXIT CONDITION
 	char opts = get_chrots(brd[p]),
 		 pr,
-		 conns,
+		 //conns,
 		 j,
 		 prerot = brd[p].rot;
 	int cnntd;
@@ -137,18 +374,18 @@ void backtrack(uint depth) {
 		if(! (i & opts) ) continue;
 		brd[p].rot = i;
 		pr = 5;
-		conns = rotate_bin_wbin(type2conns[(int)brd[p].type], i>>1);
+		//conns = rotate_bin_wbin(type2conns[(int)brd[p].type], i>>1);
 		for(j=1; j<=8; j<<=1) {                                      // dla każdego kierunku wychodzącego:
 			if((cnntd = connects_in_bdir(brd, p,j)) >= 0) {
-				++__dbg_calls["node::unionW"];
+				//++__dbg_calls["node::unionW"];
 				brd[cnntd].unionW(brd[p], --pr);                     // połącz element bieżący w danym kierunku
 			}
 		}
-		__dbgprint("Backtrack", p, depth);
+		//__dbgprint("Backtrack", p, depth);
 		backtrack(depth+1);
 
 		if(pr != 5) {
-			++__dbg_calls["node::backtrack"];
+			//++__dbg_calls["node::backtrack"];
 			node::backtrack();
 		}
 	}
@@ -166,7 +403,7 @@ void backtrack(uint depth) {
  * Uruchamia heurezę H2. */
 void read_board() {
 	char input[INPUTLEN];
-	scanf(" %d %d ", &X, &Y);
+	scanf(" %u %u ", &X, &Y);
 	XY = X*Y;
 
 	snapshot_best = new char[XY];
@@ -220,9 +457,9 @@ void print_board() {
 }
 
 
-/** Wyświetlanie planszy w trybie debug. */
-void __dbgprint(const char *str, int elem, uint shift) {
-	/*uint x,y,i;
+/* Wyświetlanie planszy w trybie debug. */
+/*void __dbgprint(const char *str, int elem, uint shift) {
+	uint x,y,i;
 	node *SRC = brd[batt_pos].find();
 	printf("%*s[%2d]: %2d=%2d:%-2d w/ %2d bulbs > %s\n", shift<<1, "", shift, elem, elem%X, elem/X, bulbs_connected(), str);
 	for(y=0;y<Y;++y) {
@@ -241,8 +478,8 @@ void __dbgprint(const char *str, int elem, uint shift) {
 				printf("   %5s", (board[y][x].find() == board[y][x+1].find()) ? "-----" : "");
 		}
 		printf("\n");
-	}*/
-}
+	}
+}*/
 
 /** Heureza H1. Ustala sytuacje na krawędziach. */
 void h1() {
@@ -283,7 +520,7 @@ void h1() {
 
 /** Zwraca ilość podłączonych żarówek. */
 inline uint bulbs_connected() {
-	++__dbg_calls["bulbs_connected"];
+	//++__dbg_calls["bulbs_connected"];
 
 	uint ret = 0;
 	node *SRC = brd[batt_pos].find();
@@ -296,4 +533,9 @@ inline uint bulbs_connected() {
 void savesnapshot() {
 	for(uint i=0;i<XY;++i)
 		snapshot_best[i] = brd[i].rot;
+}
+
+void restoresnapshot() {
+	for(uint i=0;i<XY;++i)
+		brd[i].rot = snapshot_best[i];
 }
