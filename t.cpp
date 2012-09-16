@@ -1,6 +1,6 @@
 // vim: tabstop=4:shiftwidth=4:cindent:nu
 
-//#define DBG
+#define DBG
 
 #include <cstdio>
 #include <cstdlib>
@@ -130,6 +130,8 @@ uint set<T>::uStmp = 0;
 //********************************************************************************
 //********************************************************************************
 //********************************************************************************
+typedef map<uint,uchar> undomap;
+
 struct node : public set<node> {
 	char type;                  /**< Typ obiektu. Ustalona pozycja gddy wartość dodatnia. */
 	uchar rot;                  /**< Dopuszczalne obroty obiektu. */
@@ -146,6 +148,12 @@ char rot2numrots[] = {0,1,1,2,1,2,2,3,1,2,2,3,2,3,3,4};
 /** Konwersja typu na połączenia wychodzące. */
 uchar type2conns[] = {000,0xF,0x5,0x3,0xF,0x5,0x3,0x7,0x7,0x1,};
 				       // A   B   C   D   E   F   G   H   I
+
+/** Ucięcie liczby do zakresu 0-3. */
+template <class T>
+inline T m3(T x) {
+	return x&0x3;
+}
 
 /** (Pure) Pozycja po ruchu w kierunku @a d.
  * @param p Pozycja (1D).
@@ -296,7 +304,6 @@ inline char get_chrot(const node &p) {
 class PGetChrot : public Property<uchar> {
 	bool holdsFor(const uchar& rot) {
 		node lol;
-		lol.rot;
 		char ret = get_chrot(lol);
 		return '0' <= ret && ret <= '4';
 	}
@@ -322,6 +329,78 @@ inline int connects_in_bdir(node* brd, uint p, uint bdir) {
 		&& (cnntd = pos_goto(X,XY,p,bdir)) >= 0                         // i na końcu przewodu znajduje się element
 		&& is_set(brd[cnntd])                                           // który został już ustawiony
 		&& does_connects(brd[cnntd], rotate_bin(bdir,2))) ? cnntd : -1; // i ma przewód do którego się można stąd podłączyć
+}
+
+/** Usuwa jedną z możliwości rotacji (wgłąb).
+ * @param brd Wskaźnik na tablicę (1D).
+ * @param m Mapa z info o cofnięciach.
+ * @param p Pozycja na mapie lub -1 gdy poza mapą.
+ * @param n Kierunek do usunięcia (naturalnie, 0..3).
+ * @warning Mając mapę m musimy jeszcze odpalić odpowiednio ::unionW
+ * dla każego z ustawionych elementów.
+ */
+void rem_rotation(node* brd, undomap &m, int p, uchar n) {
+	if(	is_set(brd[p])
+			|| p<0
+			|| ((uint)p)>=XY)
+		return;
+	uchar prev = get_chrots(brd[p]);
+	uchar next;
+	switch(get_chtype(brd[p])) {
+		case 'B': case 'E': rem_rotation(brd[p], n&0x1);
+						break;
+		case 'C': case 'F': rem_rotation(brd[p], n);
+							rem_rotation(brd[p], m3(n-1));
+						break;
+		case 'G': case 'H': rem_rotation(brd[p], n);
+							rem_rotation(brd[p], m3(n+1));
+						break;
+		case 'I': 			rem_rotation(brd[p], n);
+		default: ;
+	}
+	next = get_chrots(brd[p]);
+	if(prev != next) {
+		if(m.find(p) == m.end())
+			m[p] = prev;
+		switch(get_chtype(brd[p])) {
+			case 'B': case 'E':
+				// rem_rotation(brd,m,pos_goto(X,XY,p,n),n+2);   // tego nie bo trywialna pętla
+				rem_rotation(brd,m,pos_goto(X,XY,p,m3(n+2)),n);  // TCO plz!
+				break;
+			case 'C': case 'F':
+				if(!(next & m3(n-1))) // jeśli nie ma też opcji n-1 to...
+									  // z kierunku n usuń n+2
+					rem_rotation(brd,m,pos_goto(X,XY,p,n),m3(n+2));
+				if(!(next & m3(n+1))) // jeśli nie ma też opcji n+1 to...
+						              // z kierunku n+1 usuń n-1
+					rem_rotation(brd,m,pos_goto(X,XY,p,m3(n+1)),m3(n-1));
+			// case 'I' to tylko powrót (trywialna pętla)
+			default: ;
+		}
+	}
+}
+
+/** Ustaw obrót.
+ * @param n Kierunek obrotu (naturalnie, 0-3).
+ */
+void set_rotation(node* brd, undomap &m, int p, uchar n) {
+	if(m.find(p) == m.end())
+		m[p] = get_chrots(brd[p]);
+	set_chrot(brd[p], 1<<n);
+	switch(get_chtype(brd[p])) {
+		case 'B': case 'E': rem_rotation(brd,m,pos_goto(X,XY,p,m3(n+1)),m3(n-1));
+							rem_rotation(brd,m,pos_goto(X,XY,p,m3(n-1)),m3(n+1));
+					break;
+		case 'C': case 'F': rem_rotation(brd,m,pos_goto(X,XY,p,m3(n-1)),m3(n+1));
+							rem_rotation(brd,m,pos_goto(X,XY,p,m3(n+2)),n);
+					break;
+		case 'G': case 'H': rem_rotation(brd,m,pos_goto(X,XY,p,m3(n-1)),m3(n+1));
+					break;
+		case 'I':			rem_rotation(brd,m,pos_goto(X,XY,p,m3(n+1)),m3(n-1));
+							rem_rotation(brd,m,pos_goto(X,XY,p,m3(n-1)),m3(n+1));
+							rem_rotation(brd,m,pos_goto(X,XY,p,m3(n+2)),n);
+		default: ;
+	}
 }
 //********************************************************************************
 //********************************************************************************
@@ -360,8 +439,8 @@ int main() {
 	read_board();
 	h1();
 
-	char pr,                               // priorytet operacji unionW
-		 j,                                // kierunek wychodzący
+	int pr;                                // priorytet operacji unionW
+	char j,                                // kierunek wychodzący
 		 opts = get_chrots(brd[batt_pos]), // opcje obrotów
 		 i;                                // dany obrót
 	uint p;                                // element w poprawianiu poheurezowym
