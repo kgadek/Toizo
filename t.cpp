@@ -434,16 +434,10 @@ void backtrack(uint depth) {
 }
 
 
-/** Wczytujemy wierszami, maksymalnie 1500 znaków na raz (oraz dodatkowo znak końca łańcucha).
- * @warning Zakładamy, że na wejściu nie ma zbędnych białych znaków.
- * @todo I segfaulted and this is crazy, może czas przejść na scanf więc rewrite me maybe? */
-#define INPUTLEN 1502
-
 /** Wczytywanie planszy.
  * Alokuje reprezentację; ustawia zmienne ::X, ::Y, ::XY i ::snapshot_best. Znajduje baterię (ustala ::batt_pos).
  * Uruchamia heurezę H2. */
 void read_board() {
-	char input[INPUTLEN];
 	scanf(" %u %u ", &X, &Y);
 	XY = X*Y;
 
@@ -452,34 +446,33 @@ void read_board() {
 	brd = (*board) = new node[XY];
 	for(uint i=0;i<Y;++i) board[i] = *board + i*X;
 
-	uint board_pos = 0;
-	char *inp;
-	while(fgets(input,INPUTLEN,stdin) != NULL) {
-		for(inp=input; *inp; inp+=3, ++board_pos) { // ustawianie .type .rot
-			if((*inp) == 'H' || ('D' <= (*inp) && (*inp) <= 'F')) // szukanie baterii
-				batt_pos = board_pos;
-			else if((*inp) == 'I')                                // szukanie żarówek
-				lbulbs.push_back(brd+board_pos);
-			brd[board_pos].type = 'A' - (*inp) - 1;
-			switch(*inp) {
-				case 'A': case 'D': mark_set(brd[board_pos],1<<0);
-									break;
-				case 'B': case 'E': set_chrot(brd[board_pos], 0x3);     
-									break;
-				case 'I':			// H2.
-						  			// Wykonuje redukcje na styku żarówka-żarówka.
-									set_chrot(brd[board_pos], 0xF);
-									if(inp > input && inp[-3]=='I') {                      // poziomo
-										rem_rotation(brd[board_pos-1] ,0);
-										rem_rotation(brd[board_pos]   ,2);
-									}
-									if(board_pos>X && get_chtype(brd[board_pos-X])=='I') { // pionowo
-										rem_rotation(brd[board_pos-X] , 1);
-										rem_rotation(brd[board_pos]   , 3);
-									}
-									break;
-				default:            set_chrot(brd[board_pos], 0xF);
-			}
+	char chr;
+	char dgt;
+	for(uint board_pos=0; board_pos < XY; ++board_pos) {
+		scanf(" %c%c ", &chr, &dgt);
+		if(chr == 'H' || ('D' <= chr && chr <= 'F')) // szukanie baterii
+			batt_pos = board_pos;
+		else if(chr == 'I')                                // szukanie żarówek
+			lbulbs.push_back(brd+board_pos);
+		brd[board_pos].type = 'A' - 1 - chr;
+		switch(chr) {
+			case 'A': case 'D': mark_set(brd[board_pos],1<<0);
+								break;
+			case 'B': case 'E': set_chrot(brd[board_pos], 0x3);
+								break;
+			case 'I':			// H2.
+								// Wykonuje redukcje na styku żarówka-żarówka.
+								set_chrot(brd[board_pos], 0xF);
+								if((board_pos%X)>0 && get_chtype(brd[board_pos-1])=='I') { // poziomo
+									rem_rotation(brd[board_pos-1] ,0);
+									rem_rotation(brd[board_pos]   ,2);
+								}
+								if(board_pos>X && get_chtype(brd[board_pos-X])=='I') {     // pionowo
+									rem_rotation(brd[board_pos-X] , 1);
+									rem_rotation(brd[board_pos]   , 3);
+								}
+								break;
+			default:            set_chrot(brd[board_pos], 0xF);
 		}
 	}
 }
