@@ -20,6 +20,13 @@ uint X,               /**< Ilość kolumn. */
 	 Y,               /**< Ilość wierszy. */
 	 XY;              /**< Taki mały helper; xy = x*y. */
 
+/** Enum opisujący kierunki.
+ * @warning Nie zmieniać kolejności! */
+enum directions {
+	DIR_E  = 0, DIR_S , DIR_W , DIR_N,
+	DIR_NW = 4, DIR_NE, DIR_SE, DIR_SW
+};
+
 //********************************************************************************
 //********************************************************************************
 //********************************************************************************
@@ -281,15 +288,15 @@ inline uchar get_chrots(const node &p) {
 /** Zwraca rotację.
  * @pre @verbatim is_set(p) @endverbatim */
 inline char get_chrot(const node &p) {
-	char ret[] = {'0','1','2','2','3','3','3','3','4'};
-	return ret[(int)p.rot];
+	char ret[] = {'1','1','2','1','3','1','1','1','4'};
+	return ret[(int)(p.rot&0xF)];
 }
 
 #ifdef DBG
 class PGetChrot : public Property<uchar> {
 	bool holdsFor(const uchar& rot) {
 		node lol;
-		lol.rot = rot%9;
+		lol.rot;
 		char ret = get_chrot(lol);
 		return '0' <= ret && ret <= '4';
 	}
@@ -297,7 +304,7 @@ class PGetChrot : public Property<uchar> {
 #endif
 
 /** Usuwa jedną z możliwości rotacji.
- * @param r Rotacja (naturalnie). */
+ * @param r Rotacja (naturalnie), 0-3. */
 inline void rem_rotation(node &p, uchar r) {
 	p.rot &= (0xF ^ (1<<r));
 	if(rot2numrots[(int)p.rot] <= 1)
@@ -456,11 +463,11 @@ void read_board() {
 			switch(*inp) {
 				case 'A': case 'D': mark_set(brd[board_pos],1<<0);
 									break;
-				case 'B': case 'E': brd[board_pos].rot = 0x3;     
+				case 'B': case 'E': set_chrot(brd[board_pos], 0x3);     
 									break;
 				case 'I':			// H2.
 						  			// Wykonuje redukcje na styku żarówka-żarówka.
-									brd[board_pos].rot = 0xF;
+									set_chrot(brd[board_pos], 0xF);
 									if(inp > input && inp[-3]=='I') {                      // poziomo
 										rem_rotation(brd[board_pos-1] ,0);
 										rem_rotation(brd[board_pos]   ,2);
@@ -470,7 +477,7 @@ void read_board() {
 										rem_rotation(brd[board_pos]   , 3);
 									}
 									break;
-				default:            brd[board_pos].rot = 0xF;
+				default:            set_chrot(brd[board_pos], 0xF);
 			}
 		}
 	}
@@ -515,49 +522,55 @@ void __dbgprint(const char *str, int elem, uint shift) {
 	}
 }
 
+/** Heureza H1_1: rogi.
+ * @param cornern Który róg poprawiamy. */
+inline void h1_1(int x, int y, directions corner) {
+	if(x<0 || y<0) return;
+	switch(get_chtype(board[y][x])) {
+		case 'B':           mark_set(board[y][x],1<<0); //martwy node
+							break;
+		case 'C': case 'F':
+		case 'G': case 'H': mark_set(board[y][x], 1<<(corner-4));
+							break;
+		case 'I':           rem_rotation(board[y][x], (corner-2)&0x3);
+							rem_rotation(board[y][x], (corner-1)&0x3);
+							break;
+		default: ;
+	}
+}
+
+/** Heureza H1_2: boki.
+ * @param i Początek obszaru.
+ * @param iinc To, ile dokładamy do @a i by przejść dalej.
+ * @param iend Koniec obszaru.
+ * @param border Którą krawędź przetwarzamy. */
+inline void h1_2(int i, int iinc, int iend, directions border) {
+	for(; i!=iend; i+=iinc) {
+		switch(get_chtype(brd[i])) {
+			case 'B':           mark_set(brd[i], 2>>(border&0x1));
+								break;
+			case 'C': case 'F': rem_rotation(brd[i], border&0x3);
+								rem_rotation(brd[i], (border-1)&0x3);
+								break;
+			case 'I':			rem_rotation(brd[i], border);
+								break;
+			case 'G':			mark_set(brd[i], 1<<((border+1)&0x3));
+			default: ;
+		}
+	}
+}
+
 /** Heureza H1. Ustala sytuacje na krawędziach. */
 void h1() {
-	uint x,y,i=0;
-	char cornern[] = {0,1,3,2}; // Mały helper: przekształcenie NW NE SW SE -> NW NE SE SW.
-	
-	for(y=0; y<Y; y+=Y-1)                                                          // rogi
-		for(x=0;x<X; x+=X-1, ++i)
-			switch(get_chtype(board[y][x])) {
-				case 'B':           mark_set(board[y][x],1<<0);
-									break ; // martwy node
-				case 'C': case 'F':
-				case 'G': case 'H': mark_set(board[y][x],1<<cornern[i]);
-									break ;
-				case 'I':           rem_rotation(board[y][x], (cornern[i]+3)&0x3);
-									rem_rotation(board[y][x], (cornern[i]+2)&0x3);
-				default: ;
-			}
-	for(i=0,y=0;y<Y;y+=Y-1,++i)                                                    // boki góra/dół
-		for(x=X-2;x>0;--x)
-			switch(get_chtype(board[y][x])) {
-				case 'B':           mark_set(board[y][x],1);
-									break ;
-				case 'C': case 'F': rem_rotation(board[y][x],(i+2)&3);
-									rem_rotation(board[y][x],(i+3)&3);
-									break ;
-				case 'G': case 'H': mark_set(board[y][x],i<<1);       
-									break ;
-				case 'I':           rem_rotation(board[y][x],1|(2>>i));
-				default:            ;
-			}
-	for(i=0,x=0;x<X;x+=X-1,++i)                                                    // boki lewo/prawo
-		for(y=Y-2;y>0;--y)
-			switch(get_chtype(board[y][x])) {
-				case 'B':           mark_set(board[y][x],2);
-									break ;
-				case 'C': case 'F': rem_rotation(board[y][x],1^i);
-									rem_rotation(board[y][x],2^i);      
-									break ;
-				case 'G': case 'H': mark_set(board[y][x],1<<(1|(2>>i)));
-									break ;
-				case 'I':           rem_rotation(board[y][x],2-(i<<1));
-				default:            ;
-			}
+	h1_1(0  , 0  , DIR_NW);
+	h1_1(X-1, 0  , DIR_NE);
+	h1_1(X-1, Y-1, DIR_SE);
+	h1_1(0  , Y-1, DIR_SW);
+
+	h1_2(1     , 1 , X-1 , DIR_N);
+	h1_2(2*X-1 , X , XY-1, DIR_E);
+	h1_2(XY-2  , -1, XY-X, DIR_S);
+	h1_2(XY-2*X, -X, 0   , DIR_W);
 }
 
 /** Zwraca ilość żarówek podłączonych do źródła w danej chwili. */
