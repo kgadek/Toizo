@@ -1,6 +1,6 @@
 // vim: tabstop=4:shiftwidth=4:cindent:nu
 
-#define DBG
+//#define DBG
 
 #include <cstdio>
 #include <cstdlib>
@@ -254,10 +254,22 @@ inline void mark_set(node &p) {
 	p.type = abs(p.type);
 }
 
+/** Usuń znacznik 'ustalony'. */
+inline void mark_unset(node &p) {
+	p.type = -abs(p.type);
+}
+
 /** Ustaw obrót.
  * @param r Obrót (binarnie). */
 inline void set_chrot(node &p, const uchar r) {
 	p.rot = r;
+}
+
+/** Przywraca stan 'element wcześniej nie był ustalony, miał takie opcje'.
+ * @param r Obrót (binarnie). */
+inline void mark_unset(node &p, const uchar r) {
+	mark_unset(p);
+	set_chrot(p,r);
 }
 
 /** Ustaw pozycję.
@@ -265,11 +277,6 @@ inline void set_chrot(node &p, const uchar r) {
 inline void mark_set(node &p, const uchar r) {
 	mark_set(p);
 	set_chrot(p,r);
-}
-
-/** Usuń znacznik 'ustalony'. */
-inline void make_unset(node &p) {
-	p.type = -abs(p.type);
 }
 
 /** Czy ma znacznik 'ustalony'? */
@@ -456,18 +463,23 @@ int main() {
 	savesnapshot();
 	// backtrack
 	mark_set(brd[batt_pos]);
-	for(i=1; i<=8; i<<=1) { // dla każdego możliwego obrotu:
+	for(i=0; i<4; ++i) { // dla każdego możliwego obrotu:
 		if(! (i & opts) )
 			continue;
+		undomap um;
 		pr = 5;
-		set_chrot(brd[batt_pos], i);
-		for(j=1; j<=8; j<<=1)
-			if((cnntd = connects_in_bdir(brd, batt_pos,j)) >= 0)
-				brd[cnntd].unionW(brd[batt_pos], --pr);
+		set_rotation(brd,um,batt_pos,i);
+		for(undomap::iterator it=um.begin(); it!=um.end(); ++it)
+			if(is_set(brd[(*it).first]))
+				for(j=1; j<=8; j<<=1)
+					if((cnntd = connects_in_bdir(brd, (*it).first,j)) >= 0)
+						brd[cnntd].unionW(brd[(*it).first], --pr);
 		backtrack(1);
 
 		if(pr != 5)
 			node::backtrack();
+		for(undomap::iterator it=um.begin(); it!=um.end(); ++it)
+			mark_unset(brd[(*it).first], (*it).second);	
 	}
 
 	restoresnapshot();
@@ -495,20 +507,25 @@ void backtrack(uint depth) {
 		 prerot = brd[p].rot;
 	int cnntd;
 	mark_set(brd[p]);
-	for(char i=1; i<=8; i<<=1) {
+	for(char i=0; i<4; ++i) {
 		if(! (i & opts) )
 			continue;
+		undomap um;
 		pr = 5;
-		set_chrot(brd[p], i);
-		for(j=1; j<=8; j<<=1)                             // dla każdego kierunku wychodzącego:
-			if((cnntd = connects_in_bdir(brd,p,j)) >= 0)
-				brd[cnntd].unionW(brd[p], --pr);          // połącz element bieżący w danym kierunku
+		set_rotation(brd,um,p,i);
+		for(undomap::iterator it=um.begin(); it!=um.end(); ++it)
+			if(is_set(brd[(*it).first]))
+				for(j=1; j<=8; j<<=1)
+					if((cnntd = connects_in_bdir(brd, (*it).first,j)) >= 0)
+						brd[cnntd].unionW(brd[(*it).first], --pr);
 		backtrack(depth+1);
 
 		if(pr != 5)
 			node::backtrack();
+		for(undomap::iterator it=um.begin(); it!=um.end(); ++it)
+			mark_unset(brd[(*it).first], (*it).second);	
 	}
-	make_unset(brd[p]);
+	mark_unset(brd[p]);
 	set_chrot(brd[p], prerot);
 }
 
