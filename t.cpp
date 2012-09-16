@@ -1,6 +1,6 @@
 // vim: tabstop=4:shiftwidth=4:cindent:nu
 
-#define DBG
+//#define DBG
 
 #include <cstdio>
 #include <cstdlib>
@@ -373,6 +373,7 @@ int main() {
 				if((cnntd = connects_in_bdir(brd, p,j)) >= 0)
 					brd[cnntd].unionW(brd[p], -10);
 
+	best_so_far = bulbs_connected();
 	savesnapshot();
 	// backtrack
 	mark_set(brd[batt_pos]);
@@ -380,7 +381,7 @@ int main() {
 		if(! (i & opts) )
 			continue;
 		pr = 5;
-		set_chrot(brd[batt_pos], 1<<i);
+		set_chrot(brd[batt_pos], i);
 		for(j=1; j<=8; j<<=1)
 			if((cnntd = connects_in_bdir(brd, batt_pos,j)) >= 0)
 				brd[cnntd].unionW(brd[batt_pos], --pr);
@@ -567,10 +568,10 @@ void h1() {
 	h1_1(X-1, Y-1, DIR_SE);
 	h1_1(0  , Y-1, DIR_SW);
 
-	h1_2(1     , 1 , X-1 , DIR_N);
-	h1_2(2*X-1 , X , XY-1, DIR_E);
-	h1_2(XY-2  , -1, XY-X, DIR_S);
-	h1_2(XY-2*X, -X, 0   , DIR_W);
+	if(1 <= X-1)     h1_2 (1     , 1 , X-1 , DIR_N);
+	if(2*X <= XY)    h1_2 (2*X-1 , X , XY-1, DIR_E);
+	if(X >= 2)       h1_2 (XY-2  , -1, XY-X, DIR_S);
+	if(XY >= (X<<1)) h1_2 (XY-2*X, -X, 0   , DIR_W);
 }
 
 /** Zwraca ilość żarówek podłączonych do źródła w danej chwili. */
