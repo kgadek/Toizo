@@ -303,7 +303,8 @@ inline uchar get_chrots(const node &p) {
 /** Zwraca rotację.
  * @pre @verbatim is_set(p) @endverbatim */
 inline char get_chrot(const node &p) {
-    char ret[] = {'1','1','2','1','3','1','1','1','4'};
+    char ret[] = {'1','1','2','1','3','1','1','1','4',
+        '1','1','1','1','1','1','1','1'};
     return ret[(int)(p.rot&0xF)];
 }
 
@@ -330,7 +331,7 @@ inline void rem_rotation(node &p, uchar r) {
  * @param bdir Kierunek (binarnie).
  * @return Pozycja sąsiada gdy połączony lub -1. */
 inline int connects_in_bdir(node* brd, uint p, uint bdir) {
-    uchar conns = rotate_bin_wbin(type2conns[(int)brd[p].type], brd[p].rot>>1);
+    uchar conns = rotate_bin_wbin(type2conns[(int)brd[p].type], get_chrot(brd[p])>>1);
     int cnntd;
     return ((bdir&conns)                                                // jeśli dany element ma przewód w tym kierunku
         && (cnntd = pos_goto(X,XY,p,bdir)) >= 0                         // i na końcu przewodu znajduje się element
@@ -347,9 +348,9 @@ inline int connects_in_bdir(node* brd, uint p, uint bdir) {
  * dla każego z ustawionych elementów.
  */
 void rem_rotation(node* brd, undomap &m, int p, uchar n) {
-    if( is_set(brd[p])
-            || p<0
-            || ((uint)p)>=XY)
+    if( p<0
+            || ((uint)p)>=XY
+            || is_set(brd[p]))
         return;
     uchar prev = get_chrots(brd[p]);
     uchar next;
@@ -371,16 +372,16 @@ void rem_rotation(node* brd, undomap &m, int p, uchar n) {
             m[p] = prev;
         switch(get_chtype(brd[p])) {
             case 'B': case 'E':
-                // rem_rotation(brd,m,pos_goto(X,XY,p,n),n+2);   // tego nie bo trywialna pętla
-                rem_rotation(brd,m,pos_goto(X,XY,p,m3(n+2)),n);  // TCO plz!
+                // rem_rotation(brd,m,pos_goto(X,XY,p,1<<n),n+2);   // tego nie bo trywialna pętla
+                rem_rotation(brd,m,pos_goto(X,XY,p,1<<m3(n+2)),n);  // TCO plz!
                 break;
             case 'C': case 'F':
-                if(!(next & m3(n-1))) // jeśli nie ma też opcji n-1 to...
+                //if(!(next & (1<<(m3(n-1))))) // jeśli nie ma też opcji n-1 to...
                                       // z kierunku n usuń n+2
-                    rem_rotation(brd,m,pos_goto(X,XY,p,n),m3(n+2));
-                if(!(next & m3(n+1))) // jeśli nie ma też opcji n+1 to...
+                    //rem_rotation(brd,m,pos_goto(X,XY,p,1<<n),m3(n+2)); // tego nie bo trywialna pętla
+                if(!(next & (1<<(m3(n+1))))) // jeśli nie ma też opcji n+1 to...
                                       // z kierunku n+1 usuń n-1
-                    rem_rotation(brd,m,pos_goto(X,XY,p,m3(n+1)),m3(n-1));
+                    rem_rotation(brd,m,pos_goto(X,XY,p,1<<m3(n+1)),m3(n-1));
             // case 'I' to tylko powrót (trywialna pętla)
             default: ;
         }
@@ -395,23 +396,27 @@ void set_rotation(node* brd, undomap &m, int p, uchar n) {
         m[p] = get_chrots(brd[p]);
     set_chrot(brd[p], 1<<n);
     switch(get_chtype(brd[p])) {
-        case 'B': case 'E': rem_rotation(brd,m,pos_goto(X,XY,p,m3(n+1)),m3(n-1));
-                            rem_rotation(brd,m,pos_goto(X,XY,p,m3(n-1)),m3(n+1));
+        case 'B': case 'E': rem_rotation(brd,m,pos_goto(X,XY,p,1<<m3(n+1)),m3(n-1));
+                            rem_rotation(brd,m,pos_goto(X,XY,p,1<<m3(n-1)),m3(n+1));
                     break;
-        case 'C': case 'F': rem_rotation(brd,m,pos_goto(X,XY,p,m3(n-1)),m3(n+1));
-                            rem_rotation(brd,m,pos_goto(X,XY,p,m3(n+2)),n);
+        case 'C': case 'F': rem_rotation(brd,m,pos_goto(X,XY,p,1<<m3(n-1)),m3(n+1));
+                            rem_rotation(brd,m,pos_goto(X,XY,p,1<<m3(n+2)),n);
                     break;
-        case 'G': case 'H': rem_rotation(brd,m,pos_goto(X,XY,p,m3(n-1)),m3(n+1));
+        case 'G': case 'H': rem_rotation(brd,m,pos_goto(X,XY,p,1<<m3(n-1)),m3(n+1));
                     break;
-        case 'I':           rem_rotation(brd,m,pos_goto(X,XY,p,m3(n+1)),m3(n-1));
-                            rem_rotation(brd,m,pos_goto(X,XY,p,m3(n-1)),m3(n+1));
-                            rem_rotation(brd,m,pos_goto(X,XY,p,m3(n+2)),n);
+        case 'I':           rem_rotation(brd,m,pos_goto(X,XY,p,1<<m3(n+1)),m3(n-1));
+                            rem_rotation(brd,m,pos_goto(X,XY,p,1<<m3(n-1)),m3(n+1));
+                            rem_rotation(brd,m,pos_goto(X,XY,p,1<<m3(n+2)),n);
         default: ;
     }
 }
 //********************************************************************************
 //********************************************************************************
 //********************************************************************************
+void __dbgprintum(undomap &m) {
+    for(undomap::iterator it = m.begin(); it != m.end(); ++it)
+        printf("%d = %d\n", (*it).first, (*it).second);
+}
 
 
 uint batt_pos;        /**< Pozycja baterii. */
@@ -462,9 +467,8 @@ int main() {
     best_so_far = bulbs_connected();
     savesnapshot();
     // backtrack
-    mark_set(brd[batt_pos]);
     for(i=0; i<4; ++i) { // dla każdego możliwego obrotu:
-        if(! (i & opts) )
+        if(! ((1<<i) & opts) )
             continue;
         undomap um;
         pr = 5;
@@ -508,7 +512,7 @@ void backtrack(uint depth) {
     int cnntd;
     mark_set(brd[p]);
     for(char i=0; i<4; ++i) {
-        if(! (i & opts) )
+        if(! ((1<<i) & opts) )
             continue;
         undomap um;
         pr = 5;
